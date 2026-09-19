@@ -106,7 +106,7 @@ public class App {
     private static void buildAndShow() {
         installLookAndFeel();
 
-        JFrame frame = new JFrame("Java Noted.AI");
+        JFrame frame = new JFrame("Noted.AI");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setMinimumSize(new Dimension(700, 540));
         frame.setSize(980, 760);
@@ -226,7 +226,7 @@ public class App {
         header.setOpaque(false);
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
 
-        JLabel appName = new JLabel("Java Noted.AI");
+        JLabel appName = new JLabel("Noted.AI");
         appName.setForeground(TEXT_DARK);
         appName.setAlignmentX(Component.LEFT_ALIGNMENT);
         scaledFont(appName, 34);
