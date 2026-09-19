@@ -1,27 +1,24 @@
+// App.java
 package com.noted.ai.main;
 
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.FontFormatException;
+import java.awt.FlowLayout;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.GraphicsEnvironment;
 import java.awt.GridBagLayout;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.geom.Path2D;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.function.Consumer;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -44,73 +41,39 @@ import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 
 /**
- * Noted.AI - main window, empty state.
+ * Noted.AI - main window.
  *
- * This class is presentation only: layout, painting and resize behaviour.
- * It holds no application state and talks to nothing else in the project.
+ * This class is presentation only: layout, painting, state switching that is
+ * purely visual (empty vs. populated, collapsed vs. expanded), and resize
+ * behaviour. It holds no document data and makes no decisions about what a
+ * click means - it only reports that the click happened, through the small
+ * callback API below. Main.java owns every one of those decisions.
  *
- * Every dimension below is expressed at design scale (1.0) and passed through
- * s()/sf() before use, so the whole window grows and shrinks as one piece.
- *
- * Styling of a component is always applied by the builder that creates it,
- * never from inside the component's own constructor, so no partially built
- * instance is ever published to the scale registry.
+ * Build it with {@link #createAndShow()}, not a constructor - App has no
+ * public constructor and no main() of its own.
  */
-public class App {
+public final class App {
 
-    /* ------------------------------------------------------------------
-     * Palette
-     * ------------------------------------------------------------------ */
-    private static final Color PANEL_DARK   = Color.decode("#383F4D");
-    private static final Color PANEL_HOVER  = Color.decode("#464E5F");
-    private static final Color CARD_BG      = Color.WHITE;
-    private static final Color TEXT_DARK    = Color.decode("#1B2029");
-    private static final Color TEXT_MUTED   = Color.decode("#6C7480");
-    private static final Color FIELD_BORDER = Color.decode("#E4E7ED");
-    private static final Color ICON_COLOR   = Color.decode("#3A4150");
-    private static final Color SCROLL_THUMB = Color.decode("#D5D9E1");
+    private static final double SPLIT_RATIO = 0.46;
 
-    /* ------------------------------------------------------------------
-     * Scaling
-     *
-     * DESIGN_WIDTH / DESIGN_HEIGHT describe the window size at which the
-     * layout is drawn 1:1. A larger window scales everything up, a smaller
-     * one scales it down. Lower these two numbers to make the UI bigger
-     * everywhere; raise them to make it smaller.
-     * ------------------------------------------------------------------ */
-    private static final float DESIGN_WIDTH  = 820f;
-    private static final float DESIGN_HEIGHT = 640f;
-    private static final float MIN_SCALE     = 0.80f;
-    private static final float MAX_SCALE     = 2.60f;
-    private static final double SPLIT_RATIO  = 0.46;
-
-    private static final List<Runnable> SCALE_HOOKS = new ArrayList<>();
-    private static float scale = 1f;
-
-    private static final String FONT_PATH = "/fonts/static/Kalnia-Regular.ttf";
-    private static Font baseFont;
+    private final JFrame frame;
+    private final JButton addNewButton;
+    private final DocumentsPanel documentsPanel;
+    private final ChatPanel chatPanel;
 
     private App() {
-        // GUI definition only; not meant to be instantiated.
-    }
-
-    /* ------------------------------------------------------------------
-     * Entry point
-     * ------------------------------------------------------------------ */
-    public static void main(String[] args) {
-        System.setProperty("awt.useSystemAAFontSettings", "on");
-        System.setProperty("swing.aatext", "true");
-        SwingUtilities.invokeLater(App::buildAndShow);
-    }
-
-    private static void buildAndShow() {
         installLookAndFeel();
 
-        JFrame frame = new JFrame("Noted.AI");
+        frame = new JFrame("Noted.AI");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setMinimumSize(new Dimension(700, 540));
         frame.setSize(980, 760);
         frame.setLocationRelativeTo(null);
+
+        documentsPanel = new DocumentsPanel();
+        chatPanel = new ChatPanel();
+
+        addNewButton = new PillButton("Add New");
 
         final JSplitPane split = new JSplitPane(
                 JSplitPane.HORIZONTAL_SPLIT, buildLeftPanel(), buildRightPanel());
@@ -123,78 +86,79 @@ public class App {
         frame.addComponentListener(new ComponentAdapter() {
             @Override
             public void componentResized(ComponentEvent e) {
-                applyScale(split);
+                Scale.recompute(split.getWidth(), split.getHeight());
+                split.setDividerLocation(SPLIT_RATIO);
+                split.revalidate();
+                split.repaint();
             }
         });
 
         frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
-        frame.setVisible(true);
 
-        SwingUtilities.invokeLater(() -> applyScale(split));
+        SwingUtilities.invokeLater(() -> {
+            Scale.recompute(split.getWidth(), split.getHeight());
+            split.setDividerLocation(SPLIT_RATIO);
+        });
     }
 
-    /** Recomputes the scale factor from the current window size and re-lays everything out. */
-    private static void applyScale(JSplitPane split) {
-        int width = split.getWidth();
-        int height = split.getHeight();
-        if (width <= 0 || height <= 0) {
-            return;
-        }
-
-        float next = Math.min(width / DESIGN_WIDTH, height / DESIGN_HEIGHT);
-        next = Math.max(MIN_SCALE, Math.min(MAX_SCALE, next));
-
-        if (Math.abs(next - scale) > 0.005f) {
-            scale = next;
-            for (Runnable hook : SCALE_HOOKS) {
-                hook.run();
-            }
-        }
-
-        split.setDividerLocation(SPLIT_RATIO);
-        split.revalidate();
-        split.repaint();
+    private void configureUI() {
+        Scale.font(addNewButton, 13);
+        Scale.padding(addNewButton, 8, 18, 8, 18);
+        documentsPanel.installScaleHooks();
+        documentsPanel.initializeState();
+        chatPanel.installScaleHooks();
+        Scale.recompute(frame.getWidth(), frame.getHeight());
     }
 
-    private static int s(double designValue) {
-        return Math.max(1, Math.round((float) (designValue * scale)));
+    /** Builds the window and shows it. This is the only way to obtain an App. */
+    public static App createAndShow() {
+        App app = new App();
+        app.configureUI();
+        app.frame.setVisible(true);
+        return app;
     }
 
-    private static float sf(double designValue) {
-        return (float) (designValue * scale);
+    /* ------------------------------------------------------------------
+     * Public API for Main.java - every method below either registers a
+     * callback for something the user did, or renders something Main told
+     * it to render. Nothing here decides what a document or a message is.
+     * ------------------------------------------------------------------ */
+
+    public void setOnAddNewDocument(Runnable handler) {
+        addNewButton.addActionListener(e -> handler.run());
     }
 
-    /** Registers a restyle step and runs it once so the first layout is already correct. */
-    private static void onScale(Runnable hook) {
-        SCALE_HOOKS.add(hook);
-        hook.run();
+    public void setOnSendMessage(Consumer<String> handler) {
+        chatPanel.setOnSend(handler);
     }
 
-    /**
-     * Applies a scale-aware font. Call this from a builder on a fully constructed
-     * component, never from that component's own constructor.
-     */
-    private static void scaledFont(JComponent target, double designSize) {
-        onScale(() -> target.setFont(font(sf(designSize))));
+    public void addDocumentCard(JComponent card) {
+        documentsPanel.addCard(card);
     }
 
-    /** Applies scale-aware empty-border padding. Same construction rule as scaledFont. */
-    private static void scaledPadding(JComponent target, double top, double left,
-                                      double bottom, double right) {
-        onScale(() -> target.setBorder(
-                BorderFactory.createEmptyBorder(s(top), s(left), s(bottom), s(right))));
+    public void removeDocumentCard(JComponent card) {
+        documentsPanel.removeCard(card);
     }
 
-    /** Applies a scale-aware vertical gap to a BorderLayout container. */
-    private static void scaledVgap(JPanel target, double designGap) {
-        onScale(() -> ((BorderLayout) target.getLayout()).setVgap(s(designGap)));
+    public void clearDocumentCards() {
+        documentsPanel.clear();
     }
 
-    /** Applies a scale-aware horizontal gap to a BorderLayout container. */
-    private static void scaledHgap(JPanel target, double designGap) {
-        onScale(() -> ((BorderLayout) target.getLayout()).setHgap(s(designGap)));
+    public int getDocumentCardCount() {
+        return documentsPanel.getCardCount();
     }
 
+    public void appendUserMessage(String text) {
+        chatPanel.appendMessage("You", text, true);
+    }
+
+    public void appendAssistantMessage(String text) {
+        chatPanel.appendMessage("Assistant", text, false);
+    }
+
+    /* ------------------------------------------------------------------
+     * Look and feel
+     * ------------------------------------------------------------------ */
     private static void installLookAndFeel() {
         try {
             // referenced by name so the file still compiles without the dependency resolved
@@ -217,36 +181,32 @@ public class App {
     /* ------------------------------------------------------------------
      * Left panel : documents
      * ------------------------------------------------------------------ */
-    private static JPanel buildLeftPanel() {
+    private JPanel buildLeftPanel() {
         JPanel left = new JPanel(new BorderLayout());
-        left.setBackground(CARD_BG);
-        scaledPadding(left, 80, 45, 40, 45);
+        left.setBackground(Theme.CARD_BG);
+        Scale.padding(left, 80, 45, 40, 45);
 
         JPanel header = new JPanel();
         header.setOpaque(false);
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
 
         JLabel appName = new JLabel("Noted.AI");
-        appName.setForeground(TEXT_DARK);
+        appName.setForeground(Theme.TEXT_DARK);
         appName.setAlignmentX(Component.LEFT_ALIGNMENT);
-        scaledFont(appName, 34);
+        Scale.font(appName, 34);
 
         JPanel docRow = new JPanel(new BorderLayout());
         docRow.setOpaque(false);
         docRow.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel documents = new JLabel("Documents");
-        documents.setForeground(TEXT_DARK);
-        scaledFont(documents, 34);
-        docRow.add(documents, BorderLayout.WEST);
-
-        PillButton addNew = new PillButton("Add New");
-        scaledFont(addNew, 13);
-        scaledPadding(addNew, 8, 18, 8, 18);
+        JLabel documentsHeading = new JLabel("Documents");
+        documentsHeading.setForeground(Theme.TEXT_DARK);
+        Scale.font(documentsHeading, 34);
+        docRow.add(documentsHeading, BorderLayout.WEST);
 
         JPanel buttonHolder = new JPanel(new GridBagLayout()); // vertically centres the pill
         buttonHolder.setOpaque(false);
-        buttonHolder.add(addNew);
+        buttonHolder.add(addNewButton);
         docRow.add(buttonHolder, BorderLayout.EAST);
 
         header.add(appName);
@@ -254,50 +214,41 @@ public class App {
         header.add(docRow);
 
         left.add(header, BorderLayout.NORTH);
-        left.add(buildEmptyDocumentsState(), BorderLayout.CENTER);
+        left.add(documentsPanel, BorderLayout.CENTER);
         return left;
-    }
-
-    private static JPanel buildEmptyDocumentsState() {
-        JPanel centered = new JPanel(new GridBagLayout());
-        centered.setOpaque(false);
-        centered.add(centeredLines(15,
-                "Documents are empty right now,",
-                "click Add new to start"));
-        return centered;
     }
 
     /* ------------------------------------------------------------------
      * Right panel : mood analysis + assistant
      * ------------------------------------------------------------------ */
-    private static JPanel buildRightPanel() {
+    private JPanel buildRightPanel() {
         JPanel right = new JPanel(new BorderLayout());
-        right.setBackground(PANEL_DARK);
-        scaledPadding(right, 62, 40, 40, 40);
+        right.setBackground(Theme.PANEL_DARK);
+        Scale.padding(right, 62, 40, 40, 40);
 
         JLabel title = new JLabel("Mood Analysis");
         title.setForeground(Color.WHITE);
-        scaledFont(title, 32);
+        Scale.font(title, 32);
 
         JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setOpaque(false);
         titleRow.add(title, BorderLayout.WEST);
-        scaledPadding(titleRow, 0, 4, 26, 0);
+        Scale.padding(titleRow, 0, 4, 26, 0);
         right.add(titleRow, BorderLayout.NORTH);
 
         JPanel cards = new JPanel(new BorderLayout());
         cards.setOpaque(false);
-        scaledVgap(cards, 22);
+        Scale.vgap(cards, 22);
         cards.add(buildMoodCard(), BorderLayout.NORTH);
-        cards.add(buildChatCard(), BorderLayout.CENTER);
+        cards.add(chatPanel, BorderLayout.CENTER);
 
         right.add(cards, BorderLayout.CENTER);
         return right;
     }
 
-    private static JComponent buildMoodCard() {
+    private JComponent buildMoodCard() {
         RoundedPanel card = new RoundedPanel(26, null);
-        card.setBackground(CARD_BG);
+        card.setBackground(Theme.CARD_BG);
         card.setLayout(new GridBagLayout());
         card.setDesignHeight(210);
 
@@ -321,100 +272,6 @@ public class App {
         return card;
     }
 
-    private static JComponent buildChatCard() {
-        RoundedPanel card = new RoundedPanel(26, null);
-        card.setBackground(CARD_BG);
-        card.setLayout(new BorderLayout());
-        scaledVgap(card, 14);
-        scaledPadding(card, 22, 22, 18, 22);
-
-        card.add(buildMessageArea(), BorderLayout.CENTER);
-        card.add(buildInputRow(), BorderLayout.SOUTH);
-        return card;
-    }
-
-    private static JScrollPane buildMessageArea() {
-        final ScrollableColumn messages = new ScrollableColumn();
-        messages.setLayout(new BoxLayout(messages, BoxLayout.Y_AXIS));
-        messages.add(buildAssistantMessage());
-
-        JScrollPane scroll = new JScrollPane(messages);
-        scroll.setOpaque(false);
-        scroll.getViewport().setOpaque(false);
-        scroll.setBorder(null);
-        scroll.setViewportBorder(null);
-        scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-        scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-
-        final JScrollBar bar = scroll.getVerticalScrollBar();
-        bar.setUI(new ThinScrollBarUI());
-        bar.setOpaque(false);
-        onScale(() -> {
-            bar.setPreferredSize(new Dimension(s(6), 0));
-            bar.setUnitIncrement(s(18));
-        });
-
-        // wrapped text needs a second pass once the real width is known
-        scroll.addComponentListener(new ComponentAdapter() {
-            @Override
-            public void componentResized(ComponentEvent e) {
-                messages.revalidate();
-            }
-        });
-        return scroll;
-    }
-
-    private static JComponent buildInputRow() {
-        RoundedPanel inputRow = new RoundedPanel(18, FIELD_BORDER);
-        inputRow.setBackground(CARD_BG);
-        inputRow.setLayout(new BorderLayout());
-        scaledHgap(inputRow, 10);
-        scaledPadding(inputRow, 12, 16, 12, 12);
-
-        PlaceholderField input = new PlaceholderField("Type your message ...");
-        scaledFont(input, 14);
-
-        inputRow.add(input, BorderLayout.CENTER);
-        inputRow.add(new SendButton(), BorderLayout.EAST);
-        return inputRow;
-    }
-
-    private static JComponent buildAssistantMessage() {
-        MessageBlock block = new MessageBlock();
-        block.setLayout(new BorderLayout());
-        block.setOpaque(false);
-        scaledVgap(block, 12);
-        scaledPadding(block, 0, 0, 20, 0);
-
-        JPanel head = new JPanel();
-        head.setOpaque(false);
-        head.setLayout(new BoxLayout(head, BoxLayout.X_AXIS));
-        head.add(new Avatar("AI", ICON_COLOR, 46));
-        head.add(new Gap(16, false));
-
-        JLabel who = new JLabel("Assistant here!");
-        who.setForeground(TEXT_DARK);
-        scaledFont(who, 15);
-        head.add(who);
-        head.add(Box.createHorizontalGlue());
-
-        JTextArea text = new JTextArea(
-                "Hi, I'm your AI Assistant. I can help you to analyze your notes "
-              + "and be a second brain of yours in problem solving journey!");
-        text.setForeground(TEXT_DARK);
-        text.setLineWrap(true);
-        text.setWrapStyleWord(true);
-        text.setEditable(false);
-        text.setFocusable(false);
-        text.setOpaque(false);
-        scaledFont(text, 14);
-        scaledPadding(text, 0, 16, 0, 6);
-
-        block.add(head, BorderLayout.NORTH);
-        block.add(text, BorderLayout.CENTER);
-        return block;
-    }
-
     /** Vertical stack of centred muted lines, used by both empty states. */
     private static JPanel centeredLines(double designSize, String... lines) {
         JPanel stack = new JPanel();
@@ -428,37 +285,12 @@ public class App {
                 stack.add(gap);
             }
             JLabel line = new JLabel(lines[i]);
-            line.setForeground(TEXT_MUTED);
+            line.setForeground(Theme.TEXT_MUTED);
             line.setAlignmentX(Component.CENTER_ALIGNMENT);
-            scaledFont(line, designSize);
+            Scale.font(line, designSize);
             stack.add(line);
         }
         return stack;
-    }
-
-    /* ------------------------------------------------------------------
-     * Fonts and painting helpers
-     * ------------------------------------------------------------------ */
-    private static Font font(float size) {
-        if (baseFont == null) {
-            baseFont = loadBaseFont();
-        }
-        return baseFont.deriveFont(size);
-    }
-
-    private static Font loadBaseFont() {
-        try (InputStream in = App.class.getResourceAsStream(FONT_PATH)) {
-            if (in == null) {
-                System.err.println("Custom font not found: " + FONT_PATH);
-                return new Font(Font.SERIF, Font.PLAIN, 12);
-            }
-            Font loaded = Font.createFont(Font.TRUETYPE_FONT, in);
-            GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(loaded);
-            return loaded;
-        } catch (IOException | FontFormatException e) {
-            System.err.println("Failed to load custom font: " + e.getMessage());
-            return new Font(Font.SERIF, Font.PLAIN, 12);
-        }
     }
 
     private static Graphics2D smooth(Graphics g) {
@@ -471,13 +303,10 @@ public class App {
 
     /* ------------------------------------------------------------------
      * Custom components
-     *
-     * None of these register themselves with the scale registry; they either
-     * read the scale at paint / layout time or are styled by their builder.
      * ------------------------------------------------------------------ */
 
     /** Scale-aware spacer, the equivalent of Box.createStrut for this layout. */
-    private static class Gap extends JComponent {
+    private static final class Gap extends JComponent {
         private final double design;
         private final boolean vertical;
 
@@ -489,7 +318,7 @@ public class App {
 
         @Override
         public Dimension getPreferredSize() {
-            return vertical ? new Dimension(0, s(design)) : new Dimension(s(design), 0);
+            return vertical ? new Dimension(0, Scale.s(design)) : new Dimension(Scale.s(design), 0);
         }
 
         @Override
@@ -500,12 +329,12 @@ public class App {
         @Override
         public Dimension getMaximumSize() {
             return vertical
-                    ? new Dimension(Short.MAX_VALUE, s(design))
-                    : new Dimension(s(design), Short.MAX_VALUE);
+                    ? new Dimension(Short.MAX_VALUE, Scale.s(design))
+                    : new Dimension(Scale.s(design), Short.MAX_VALUE);
         }
     }
 
-    /** White card with rounded corners and an optional hairline border. */
+    /** White card with rounded corners and an optional hairline border. Not final - ChatPanel extends it. */
     private static class RoundedPanel extends JPanel {
         private final double designArc;
         private final transient Color borderColor;
@@ -524,18 +353,18 @@ public class App {
         @Override
         public Dimension getPreferredSize() {
             Dimension pref = super.getPreferredSize();
-            return designHeight > 0 ? new Dimension(pref.width, s(designHeight)) : pref;
+            return designHeight > 0 ? new Dimension(pref.width, Scale.s(designHeight)) : pref;
         }
 
         @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = smooth(g);
-            int arc = s(designArc);
+            int arc = Scale.s(designArc);
             g2.setColor(getBackground());
             g2.fillRoundRect(0, 0, getWidth(), getHeight(), arc, arc);
             if (borderColor != null) {
                 g2.setColor(borderColor);
-                g2.setStroke(new BasicStroke(Math.max(1f, sf(1.0))));
+                g2.setStroke(new BasicStroke(Math.max(1f, Scale.sf(1.0))));
                 g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, arc, arc);
             }
             g2.dispose();
@@ -543,8 +372,8 @@ public class App {
         }
     }
 
-    /** Small dark pill button used for "Add New". Font and padding come from the builder. */
-    private static class PillButton extends JButton {
+    /** Small dark pill button used for "Add New". */
+    private static final class PillButton extends JButton {
         PillButton(String text) {
             super(text);
             setForeground(Color.WHITE);
@@ -553,16 +382,18 @@ public class App {
             setFocusPainted(false);
             setRolloverEnabled(true);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setFont(Theme.font(13f));
+            setBorder(BorderFactory.createEmptyBorder(Scale.s(8), Scale.s(18), Scale.s(8), Scale.s(18)));
         }
 
         @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = smooth(g);
-            Color fill = PANEL_DARK;
+            Color fill = Theme.PANEL_DARK;
             if (getModel().isPressed()) {
                 fill = fill.darker();
             } else if (getModel().isRollover()) {
-                fill = PANEL_HOVER;
+                fill = Theme.PANEL_HOVER;
             }
             g2.setColor(fill);
             g2.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
@@ -572,7 +403,7 @@ public class App {
     }
 
     /** Circular avatar with initials. */
-    private static class Avatar extends JComponent {
+    private static final class Avatar extends JComponent {
         private final String initials;
         private final transient Color background;
         private final double designDiameter;
@@ -585,7 +416,7 @@ public class App {
 
         @Override
         public Dimension getPreferredSize() {
-            int d = s(designDiameter);
+            int d = Scale.s(designDiameter);
             return new Dimension(d, d);
         }
 
@@ -607,7 +438,7 @@ public class App {
             g2.fillOval(0, 0, d, d);
 
             g2.setColor(Color.WHITE);
-            g2.setFont(font(sf(13)));
+            g2.setFont(Theme.font(Scale.sf(13)));
             FontMetrics fm = g2.getFontMetrics();
             int x = (d - fm.stringWidth(initials)) / 2;
             int y = (d - fm.getHeight()) / 2 + fm.getAscent();
@@ -617,7 +448,7 @@ public class App {
     }
 
     /** Thin "+" glyph for the empty mood card. */
-    private static class PlusIcon extends JComponent {
+    private static final class PlusIcon extends JComponent {
         private final double designSize;
 
         PlusIcon(double designSize) {
@@ -626,7 +457,7 @@ public class App {
 
         @Override
         public Dimension getPreferredSize() {
-            int d = s(designSize);
+            int d = Scale.s(designSize);
             return new Dimension(d, d);
         }
 
@@ -643,8 +474,8 @@ public class App {
         @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = smooth(g);
-            g2.setColor(ICON_COLOR);
-            g2.setStroke(new BasicStroke(Math.max(1.2f, sf(2.2)),
+            g2.setColor(Theme.ICON_COLOR);
+            g2.setStroke(new BasicStroke(Math.max(1.2f, Scale.sf(2.2)),
                     BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             int size = Math.min(getWidth(), getHeight());
             int pad = Math.round(size * 0.13f);
@@ -656,7 +487,7 @@ public class App {
     }
 
     /** Outlined triangle send glyph. */
-    private static class SendButton extends JButton {
+    private static final class SendButton extends JButton {
         SendButton() {
             setContentAreaFilled(false);
             setBorderPainted(false);
@@ -667,7 +498,7 @@ public class App {
 
         @Override
         public Dimension getPreferredSize() {
-            int d = s(30);
+            int d = Scale.s(30);
             return new Dimension(d, d);
         }
 
@@ -684,8 +515,8 @@ public class App {
         @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = smooth(g);
-            g2.setColor(getModel().isRollover() ? PANEL_DARK : ICON_COLOR);
-            g2.setStroke(new BasicStroke(Math.max(1f, sf(1.6)),
+            g2.setColor(getModel().isRollover() ? Theme.PANEL_DARK : Theme.ICON_COLOR);
+            g2.setStroke(new BasicStroke(Math.max(1f, Scale.sf(1.6)),
                     BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
 
             float w = getWidth();
@@ -700,14 +531,14 @@ public class App {
         }
     }
 
-    /** Borderless text field that paints its own placeholder. Font comes from the builder. */
-    private static class PlaceholderField extends JTextField {
+    /** Borderless text field that paints its own placeholder. */
+    private static final class PlaceholderField extends JTextField {
         private final String placeholder;
 
         PlaceholderField(String placeholder) {
             this.placeholder = placeholder;
-            setForeground(TEXT_DARK);
-            setCaretColor(TEXT_DARK);
+            setForeground(Theme.TEXT_DARK);
+            setCaretColor(Theme.TEXT_DARK);
             setOpaque(false);
             setBorder(null);
         }
@@ -719,7 +550,7 @@ public class App {
                 return;
             }
             Graphics2D g2 = smooth(g);
-            g2.setColor(TEXT_MUTED);
+            g2.setColor(Theme.TEXT_MUTED);
             g2.setFont(getFont());
             FontMetrics fm = g2.getFontMetrics();
             int y = (getHeight() - fm.getHeight()) / 2 + fm.getAscent();
@@ -729,18 +560,15 @@ public class App {
     }
 
     /** Message wrapper that never grows taller than its content inside a BoxLayout. */
-    private static class MessageBlock extends JPanel {
+    private static final class MessageBlock extends JPanel {
         @Override
         public Dimension getMaximumSize() {
             return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
         }
     }
 
-    /**
-     * Vertical message column that follows the viewport width so text wraps correctly.
-     * Its BoxLayout is installed by the builder, not by this constructor.
-     */
-    private static class ScrollableColumn extends JPanel implements Scrollable {
+    /** Vertical column that follows the viewport width; used by both the chat and the documents list. */
+    private static final class ScrollableColumn extends JPanel implements Scrollable {
         ScrollableColumn() {
             setOpaque(false);
         }
@@ -752,12 +580,12 @@ public class App {
 
         @Override
         public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
-            return s(18);
+            return Scale.s(18);
         }
 
         @Override
         public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
-            return s(72);
+            return Scale.s(72);
         }
 
         @Override
@@ -772,11 +600,11 @@ public class App {
     }
 
     /** Minimal scrollbar: no arrows, no track, rounded thumb. */
-    private static class ThinScrollBarUI extends BasicScrollBarUI {
+    private static final class ThinScrollBarUI extends BasicScrollBarUI {
         @Override
         protected void configureScrollBarColors() {
-            thumbColor = SCROLL_THUMB;
-            trackColor = CARD_BG;
+            thumbColor = Theme.SCROLL_THUMB;
+            trackColor = Theme.CARD_BG;
         }
 
         @Override
@@ -809,11 +637,352 @@ public class App {
                 return;
             }
             Graphics2D g2 = smooth(g);
-            g2.setColor(SCROLL_THUMB);
+            g2.setColor(Theme.SCROLL_THUMB);
             g2.fillRoundRect(thumbBounds.x, thumbBounds.y + 2,
                     thumbBounds.width, thumbBounds.height - 4,
                     thumbBounds.width, thumbBounds.width);
             g2.dispose();
+        }
+    }
+
+    /** Small chevron toggle, pointing down when collapsed and up when expanded. */
+    private static final class ChevronButton extends JButton {
+        private boolean expanded;
+
+        ChevronButton() {
+            setContentAreaFilled(false);
+            setBorderPainted(false);
+            setFocusPainted(false);
+            setRolloverEnabled(true);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        }
+
+        void setExpanded(boolean expanded) {
+            this.expanded = expanded;
+            repaint();
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            int d = Scale.s(22);
+            return new Dimension(d, d);
+        }
+
+        @Override
+        public Dimension getMinimumSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        public Dimension getMaximumSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = smooth(g);
+            g2.setColor(getModel().isRollover() ? Theme.PANEL_DARK : Theme.TEXT_MUTED);
+            g2.setStroke(new BasicStroke(Math.max(1.2f, Scale.sf(1.8)),
+                    BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+
+            float w = getWidth();
+            float h = getHeight();
+            float midX = w / 2f;
+
+            Path2D.Float chevron = new Path2D.Float();
+            if (expanded) {
+                chevron.moveTo(w * 0.22f, h * 0.62f);
+                chevron.lineTo(midX, h * 0.36f);
+                chevron.lineTo(w * 0.78f, h * 0.62f);
+            } else {
+                chevron.moveTo(w * 0.22f, h * 0.38f);
+                chevron.lineTo(midX, h * 0.64f);
+                chevron.lineTo(w * 0.78f, h * 0.38f);
+            }
+            g2.draw(chevron);
+            g2.dispose();
+        }
+    }
+
+    /**
+     * Left-hand documents area. Shows a muted placeholder while there are no
+     * cards, then switches to a scrollable list once any are added - entirely
+     * on its own. Main only ever calls addCard / removeCard / clear.
+     */
+    private static final class DocumentsPanel extends JPanel {
+
+        private static final String EMPTY_CARD = "empty";
+        private static final String LIST_CARD  = "list";
+        private static final int COMPACT_ROWS = 3;
+        private static final double ROW_HEIGHT = 76;
+        private static final double EXPANDED_HEIGHT = 420;
+
+        private final CardLayout layout = new CardLayout();
+        private final ScrollableColumn cardColumn = new ScrollableColumn();
+        private final JScrollPane scrollPane;
+        private final ChevronButton chevron = new ChevronButton();
+        private boolean expanded;
+
+        DocumentsPanel() {
+            setLayout(layout);
+            setOpaque(false);
+
+            cardColumn.setLayout(new BoxLayout(cardColumn, BoxLayout.Y_AXIS));
+
+            scrollPane = new JScrollPane(cardColumn);
+            scrollPane.setOpaque(false);
+            scrollPane.getViewport().setOpaque(false);
+            scrollPane.setBorder(null);
+            scrollPane.setViewportBorder(null);
+            scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+            scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+
+            JScrollBar bar = scrollPane.getVerticalScrollBar();
+            bar.setUI(new ThinScrollBarUI());
+            bar.setOpaque(false);
+            Scale.onScale(() -> {
+                bar.setPreferredSize(new Dimension(Scale.s(6), 0));
+                bar.setUnitIncrement(Scale.s(18));
+            });
+
+            chevron.setVisible(false);
+            chevron.addActionListener(e -> {
+                expanded = !expanded;
+                chevron.setExpanded(expanded);
+                updateScrollHeight();
+            });
+
+            JPanel chevronRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+            chevronRow.setOpaque(false);
+            chevronRow.add(chevron);
+            Scale.padding(chevronRow, 8, 0, 0, 0);
+
+            JPanel listPanel = new JPanel(new BorderLayout());
+            listPanel.setOpaque(false);
+            listPanel.add(scrollPane, BorderLayout.CENTER);
+            listPanel.add(chevronRow, BorderLayout.SOUTH);
+
+            add(buildEmptyState(), EMPTY_CARD);
+            add(listPanel, LIST_CARD);
+        }
+
+        private void installScaleHooks() {
+            Scale.onScale(this::updateScrollHeight);
+        }
+
+        private void initializeState() {
+            layout.show(this, EMPTY_CARD);
+        }
+
+        private JPanel buildEmptyState() {
+            JPanel centered = new JPanel(new GridBagLayout());
+            centered.setOpaque(false);
+            centered.add(centeredLines(15,
+                    "Documents are empty right now,",
+                    "click Add new to start"));
+            return centered;
+        }
+
+        void addCard(JComponent card) {
+            if (cardColumn.getComponentCount() > 0) {
+                cardColumn.add(new Gap(12, true));
+            }
+            cardColumn.add(card);
+            refresh();
+        }
+
+        void removeCard(JComponent card) {
+            int index = indexOf(card);
+            if (index < 0) {
+                return;
+            }
+            cardColumn.remove(index);
+            if (index < cardColumn.getComponentCount() && cardColumn.getComponent(index) instanceof Gap) {
+                cardColumn.remove(index);
+            } else if (index > 0 && cardColumn.getComponent(index - 1) instanceof Gap) {
+                cardColumn.remove(index - 1);
+            }
+            refresh();
+        }
+
+        void clear() {
+            cardColumn.removeAll();
+            refresh();
+        }
+
+        int getCardCount() {
+            int total = 0;
+            for (Component child : cardColumn.getComponents()) {
+                if (!(child instanceof Gap)) {
+                    total++;
+                }
+            }
+            return total;
+        }
+
+        private int indexOf(Component target) {
+            Component[] children = cardColumn.getComponents();
+            for (int i = 0; i < children.length; i++) {
+                if (children[i] == target) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private void refresh() {
+            int count = getCardCount();
+            chevron.setVisible(count > COMPACT_ROWS);
+            if (count == 0) {
+                expanded = false;
+                chevron.setExpanded(false);
+            }
+            updateScrollHeight();
+            layout.show(this, count == 0 ? EMPTY_CARD : LIST_CARD);
+            revalidate();
+            repaint();
+        }
+
+        private void updateScrollHeight() {
+            int visibleRows = Math.max(1, Math.min(getCardCount(), COMPACT_ROWS));
+            double compact = visibleRows * ROW_HEIGHT;
+            double target = expanded ? EXPANDED_HEIGHT : compact;
+            scrollPane.setPreferredSize(new Dimension(10, Scale.s(target)));
+        }
+    }
+
+    /**
+     * Right-hand assistant card: message history + input row. Reports typed
+     * text through setOnSend; appendMessage only ever renders what it's told.
+     */
+    private static final class ChatPanel extends RoundedPanel {
+
+        private static final String GREETING =
+                "Hi, I'm your AI Assistant. I can help you to analyze your notes "
+              + "and be a second brain of yours in problem solving journey!";
+
+        private final ScrollableColumn messages = new ScrollableColumn();
+        private final JScrollPane scrollPane;
+        private final PlaceholderField input;
+        private Consumer<String> onSend;
+
+        ChatPanel() {
+            super(26, null);
+            setBackground(Theme.CARD_BG);
+            setLayout(new BorderLayout());
+
+            messages.setLayout(new BoxLayout(messages, BoxLayout.Y_AXIS));
+            messages.add(buildMessageBlock("Assistant here!", GREETING, Theme.ICON_COLOR, "AI"));
+
+            scrollPane = new JScrollPane(messages);
+            scrollPane.setOpaque(false);
+            scrollPane.getViewport().setOpaque(false);
+            scrollPane.setBorder(null);
+            scrollPane.setViewportBorder(null);
+            scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+            scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+
+            JScrollBar bar = scrollPane.getVerticalScrollBar();
+            bar.setUI(new ThinScrollBarUI());
+            bar.setOpaque(false);
+            Scale.onScale(() -> {
+                bar.setPreferredSize(new Dimension(Scale.s(6), 0));
+                bar.setUnitIncrement(Scale.s(18));
+            });
+
+            scrollPane.addComponentListener(new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent e) {
+                    messages.revalidate();
+                }
+            });
+
+            RoundedPanel inputRow = new RoundedPanel(18, Theme.FIELD_BORDER);
+            inputRow.setBackground(Theme.CARD_BG);
+            inputRow.setLayout(new BorderLayout());
+            Scale.hgap(inputRow, 10);
+            Scale.padding(inputRow, 12, 16, 12, 12);
+
+            input = new PlaceholderField("Type your message ...");
+            Scale.font(input, 14);
+
+            SendButton send = new SendButton();
+            send.addActionListener(e -> submitInput());
+            input.addActionListener(e -> submitInput());
+
+            inputRow.add(input, BorderLayout.CENTER);
+            inputRow.add(send, BorderLayout.EAST);
+
+            add(scrollPane, BorderLayout.CENTER);
+            add(inputRow, BorderLayout.SOUTH);
+        }
+
+        private void installScaleHooks() {
+            Scale.vgap(this, 14);
+            Scale.padding(this, 22, 22, 18, 22);
+        }
+
+        void setOnSend(Consumer<String> handler) {
+            this.onSend = handler;
+        }
+
+        void appendMessage(String name, String text, boolean isUser) {
+            Color avatarColor = isUser ? Theme.USER_AVATAR : Theme.ICON_COLOR;
+            String initials = isUser ? "You" : "AI";
+            messages.add(buildMessageBlock(name, text, avatarColor, initials));
+            messages.revalidate();
+            messages.repaint();
+            scrollToBottom();
+        }
+
+        private void submitInput() {
+            String text = input.getText().trim();
+            if (text.isEmpty() || onSend == null) {
+                return;
+            }
+            input.setText("");
+            onSend.accept(text);
+        }
+
+        private void scrollToBottom() {
+            SwingUtilities.invokeLater(() -> {
+                JScrollBar bar = scrollPane.getVerticalScrollBar();
+                bar.setValue(bar.getMaximum());
+            });
+        }
+
+        private static JComponent buildMessageBlock(String name, String body, Color avatarColor, String initials) {
+            MessageBlock block = new MessageBlock();
+            block.setLayout(new BorderLayout());
+            block.setOpaque(false);
+            Scale.vgap(block, 12);
+            Scale.padding(block, 0, 0, 20, 0);
+
+            JPanel head = new JPanel();
+            head.setOpaque(false);
+            head.setLayout(new BoxLayout(head, BoxLayout.X_AXIS));
+            head.add(new Avatar(initials, avatarColor, 46));
+            head.add(new Gap(16, false));
+
+            JLabel who = new JLabel(name);
+            who.setForeground(Theme.TEXT_DARK);
+            Scale.font(who, 15);
+            head.add(who);
+            head.add(Box.createHorizontalGlue());
+
+            JTextArea text = new JTextArea(body);
+            text.setForeground(Theme.TEXT_DARK);
+            text.setLineWrap(true);
+            text.setWrapStyleWord(true);
+            text.setEditable(false);
+            text.setFocusable(false);
+            text.setOpaque(false);
+            Scale.font(text, 14);
+            Scale.padding(text, 0, 16, 0, 6);
+
+            block.add(head, BorderLayout.NORTH);
+            block.add(text, BorderLayout.CENTER);
+            return block;
         }
     }
 }
