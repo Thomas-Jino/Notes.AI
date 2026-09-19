@@ -184,7 +184,7 @@ public final class App {
     private JPanel buildLeftPanel() {
         JPanel left = new JPanel(new BorderLayout());
         left.setBackground(Theme.CARD_BG);
-        Scale.padding(left, 80, 45, 40, 45);
+        Scale.padding(left, 40, 45, 40, 45);
 
         JPanel header = new JPanel();
         header.setOpaque(false);
@@ -210,7 +210,7 @@ public final class App {
         docRow.add(buttonHolder, BorderLayout.EAST);
 
         header.add(appName);
-        header.add(new Gap(46, true));
+        header.add(new Gap(26, true));
         header.add(docRow);
 
         left.add(header, BorderLayout.NORTH);
