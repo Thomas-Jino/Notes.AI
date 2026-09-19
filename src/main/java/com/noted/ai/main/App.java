@@ -34,20 +34,34 @@ class App {
 
     public static void main(String[] args) {
         // Frame Setup
-        JFrame frame = new JFrame("Java Noted.AI");
+        JFrame frame = new JFrame("Java Notes.AI");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
 
         // Left panel
-        JPanel left = new JPanel(new BorderLayout());
+        JPanel left = new JPanel();
+        left.setLayout(new BorderLayout());
         left.setBackground(Color.white);
         left.setBorder(BorderFactory.createEmptyBorder(100, 35, 25, 35));
 
+        JPanel titleContainer = new JPanel();
+        titleContainer.setOpaque(false);
+        titleContainer.setLayout(new BorderLayout());
+
         // App name aligned to the top-left
-        JLabel appName = new JLabel("Java Noted.AI");
+        JLabel appName = new JLabel("Java Notes.AI");
         appName.setFont(loadCustomFont(42f));
         appName.setHorizontalAlignment(SwingConstants.LEFT);
-        left.add(appName, BorderLayout.NORTH);
+        titleContainer.add(appName, BorderLayout.NORTH);
+
+        // Documents heading directly underneath the title with extra top gap
+        JLabel documentsHeading = new JLabel("Documents");
+        documentsHeading.setFont(loadCustomFont(42f));
+        documentsHeading.setHorizontalAlignment(SwingConstants.LEFT);
+        documentsHeading.setBorder(BorderFactory.createEmptyBorder(70, 0, 0, 0));
+        titleContainer.add(documentsHeading, BorderLayout.SOUTH);
+
+        left.add(titleContainer, BorderLayout.NORTH);
 
         // Right (content) panel
         JPanel right = new JPanel();
