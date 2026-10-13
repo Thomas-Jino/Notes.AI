@@ -152,6 +152,18 @@ public final class App {
         chatPanel.appendMessage("You", text, true);
     }
 
+    public void beginAssistantThinking() {
+        chatPanel.beginAssistantThinking();
+    }
+
+    public void appendAssistantChunk(String token) {
+        chatPanel.appendAssistantChunk(token);
+    }
+
+    public void finishAssistantResponse() {
+        chatPanel.finishAssistantResponse();
+    }
+
     public void appendAssistantMessage(String text) {
         chatPanel.appendMessage("Assistant", text, false);
     }
@@ -922,17 +934,83 @@ public final class App {
             Scale.padding(this, 22, 22, 18, 22);
         }
 
+        private JTextArea activeAssistantTextArea;
+        private final StringBuilder activeAssistantBuffer = new StringBuilder();
+
         void setOnSend(Consumer<String> handler) {
             this.onSend = handler;
+        }
+
+        void beginAssistantThinking() {
+            activeAssistantBuffer.setLength(0);
+            activeAssistantTextArea = createMessageBlock("Assistant", "Thinking...", Theme.ICON_COLOR, "AI");
+            activeAssistantTextArea.setText("Thinking...");
+            scrollToBottom();
+        }
+
+        void appendAssistantChunk(String chunk) {
+            if (activeAssistantTextArea == null) {
+                beginAssistantThinking();
+            }
+
+            if ("Thinking...".equals(activeAssistantTextArea.getText())) {
+                activeAssistantTextArea.setText("");
+                activeAssistantBuffer.setLength(0);
+            }
+
+            activeAssistantBuffer.append(chunk);
+            activeAssistantTextArea.setText(activeAssistantBuffer.toString());
+            activeAssistantTextArea.setCaretPosition(activeAssistantTextArea.getDocument().getLength());
+            scrollToBottom();
+        }
+
+        void finishAssistantResponse() {
+            activeAssistantTextArea = null;
+            activeAssistantBuffer.setLength(0);
         }
 
         void appendMessage(String name, String text, boolean isUser) {
             Color avatarColor = isUser ? Theme.USER_AVATAR : Theme.ICON_COLOR;
             String initials = isUser ? "You" : "AI";
-            messages.add(buildMessageBlock(name, text, avatarColor, initials));
+            createMessageBlock(name, text, avatarColor, initials);
             messages.revalidate();
             messages.repaint();
             scrollToBottom();
+        }
+
+        private JTextArea createMessageBlock(String name, String text, Color avatarColor, String initials) {
+            MessageBlock block = new MessageBlock();
+            block.setLayout(new BorderLayout());
+            block.setOpaque(false);
+            Scale.vgap(block, 12);
+            Scale.padding(block, 0, 0, 20, 0);
+
+            JPanel head = new JPanel();
+            head.setOpaque(false);
+            head.setLayout(new BoxLayout(head, BoxLayout.X_AXIS));
+            head.add(new Avatar(initials, avatarColor, 46));
+            head.add(new Gap(16, false));
+
+            JLabel who = new JLabel(name);
+            who.setForeground(Theme.TEXT_DARK);
+            Scale.font(who, 15);
+            head.add(who);
+            head.add(Box.createHorizontalGlue());
+
+            JTextArea body = new JTextArea(text);
+            body.setForeground(Theme.TEXT_DARK);
+            body.setLineWrap(true);
+            body.setWrapStyleWord(true);
+            body.setEditable(false);
+            body.setFocusable(false);
+            body.setOpaque(false);
+            Scale.font(body, 14);
+            Scale.padding(body, 0, 16, 0, 6);
+
+            block.add(head, BorderLayout.NORTH);
+            block.add(body, BorderLayout.CENTER);
+            messages.add(block);
+            return body;
         }
 
         private void submitInput() {

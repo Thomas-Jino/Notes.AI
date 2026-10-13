@@ -4,7 +4,6 @@ package com.noted.ai.main;
 import javax.swing.SwingUtilities;
 
 import com.noted.ai.main.components.NewCard;
-
 /**
  * Application entry point and controller.
  *
@@ -77,8 +76,16 @@ public class Main {
      * ------------------------------------------------------------------ */
     private void handleSendMessage(String text) {
         view.appendUserMessage(text);
+        view.beginAssistantThinking();
 
-        // TODO: replace with a real call into AI.java / Ollama.
-        view.appendAssistantMessage("I can't analyze anything yet - connect me to Ollama in AI.java!");
+        AI.streamMessage(
+                text,
+                token -> SwingUtilities.invokeLater(() -> view.appendAssistantChunk(token)),
+                () -> SwingUtilities.invokeLater(() -> view.finishAssistantResponse()),
+                error -> SwingUtilities.invokeLater(() -> {
+                    view.finishAssistantResponse();
+                    view.appendAssistantMessage("Sorry, I couldn't respond: " + error.getMessage());
+                })
+        );
     }
 }
