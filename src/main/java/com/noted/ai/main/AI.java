@@ -18,6 +18,28 @@ import dev.langchain4j.model.output.Response;
 public class AI {
     public static String response;
     private static final ExecutorService AI_EXECUTOR = Executors.newFixedThreadPool(4);
+    private static final String OLLAMA_BASE_URL = "http://localhost:11434";
+    private static final String OLLAMA_MODEL_NAME = "qwen2.5:3b";
+    private static final Duration OLLAMA_TIMEOUT = Duration.ofMinutes(2);
+
+    private static final ChatLanguageModel CHAT_MODEL = createChatModel();
+    private static final StreamingChatLanguageModel STREAMING_CHAT_MODEL = createStreamingChatModel();
+
+    private static ChatLanguageModel createChatModel() {
+        return OllamaChatModel.builder()
+                .baseUrl(OLLAMA_BASE_URL)
+                .modelName(OLLAMA_MODEL_NAME)
+                .timeout(OLLAMA_TIMEOUT)
+                .build();
+    }
+
+    private static StreamingChatLanguageModel createStreamingChatModel() {
+        return OllamaStreamingChatModel.builder()
+                .baseUrl(OLLAMA_BASE_URL)
+                .modelName(OLLAMA_MODEL_NAME)
+                .timeout(OLLAMA_TIMEOUT)
+                .build();
+    }
 
     public static CompletableFuture<String> sendMessageAsync(String text) {
         return CompletableFuture.supplyAsync(() -> {
@@ -34,14 +56,8 @@ public class AI {
 
     public static void streamMessage(String text, Consumer<String> onToken, Runnable onComplete,
             Consumer<Throwable> onError) {
-        StreamingChatLanguageModel model = OllamaStreamingChatModel.builder()
-                .baseUrl("http://localhost:11434")
-                .modelName("sebdg/emotional_llama")
-                .timeout(Duration.ofMinutes(2))
-                .build();
-
         StringBuilder fullReply = new StringBuilder();
-        model.generate(UserMessage.from(text), new StreamingResponseHandler<AiMessage>() {
+        STREAMING_CHAT_MODEL.generate(UserMessage.from(text), new StreamingResponseHandler<AiMessage>() {
             @Override
             public void onNext(String token) {
                 fullReply.append(token);
@@ -51,7 +67,7 @@ public class AI {
             @Override
             public void onComplete(Response<AiMessage> response) {
                 AI.response = fullReply.toString();
-                System.out.println("Emotional Llama Response:\n" + AI.response);
+                System.out.println("AI Response:\n" + AI.response);
                 onComplete.run();
             }
 
@@ -63,15 +79,9 @@ public class AI {
     }
 
     public static String sendMessage(String text) {
-        ChatLanguageModel model = OllamaChatModel.builder()
-                .baseUrl("http://localhost:11434")
-                .modelName("sebdg/emotional_llama")
-                .timeout(Duration.ofMinutes(2))
-                .build();
-
-        String reply = model.generate(text);
+        String reply = CHAT_MODEL.generate(text);
         AI.response = reply;
-        System.out.println("Emotional Llama Response:\n" + reply);
+        System.out.println("AI Response:\n" + reply);
         return reply;
     }
 }
