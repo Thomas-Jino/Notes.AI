@@ -316,8 +316,10 @@ public final class App {
         docRow.add(buttonHolder, BorderLayout.EAST);
 
         header.add(appName);
-        header.add(new Gap(26, true));
+        header.add(new Gap(34, true));
         header.add(docRow);
+
+        documentsPanel.setBorder(BorderFactory.createEmptyBorder(Scale.s(22), 0, 0, 0));
 
         left.add(header, BorderLayout.NORTH);
         left.add(documentsPanel, BorderLayout.CENTER);

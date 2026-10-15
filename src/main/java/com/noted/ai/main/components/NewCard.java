@@ -19,6 +19,7 @@ import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 
 import com.noted.ai.main.Scale;
@@ -65,7 +66,7 @@ public class NewCard extends JPanel {
         this.listener = listener;
 
         setOpaque(false);
-        setBorder(BorderFactory.createEmptyBorder(Scale.s(14), Scale.s(18), Scale.s(14), Scale.s(14)));
+        setBorder(BorderFactory.createEmptyBorder(Scale.s(16), Scale.s(18), Scale.s(16), Scale.s(16)));
 
         buildContent();
     }
@@ -102,9 +103,11 @@ public class NewCard extends JPanel {
         });
 
         PillButton editButton = new PillButton("Edit");
+        editButton.setFont(editButton.getFont().deriveFont(30.0f));
         editButton.addActionListener(e -> beginRename());
 
         PillButton open = new PillButton("Open");
+        open.setFont(open.getFont().deriveFont(30.0f));
         open.addActionListener(e -> {
             if (listener != null) {
                 listener.onOpen(this);
@@ -112,6 +115,7 @@ public class NewCard extends JPanel {
         });
 
         PillButton deleteButton = new PillButton("Delete");
+        deleteButton.setFont(deleteButton.getFont().deriveFont(30.0f));
         deleteButton.addActionListener(e -> {
             if (listener != null) {
                 listener.onDelete(this);
@@ -131,10 +135,11 @@ public class NewCard extends JPanel {
         JPanel actions = new JPanel();
         actions.setOpaque(false);
         actions.setLayout(new BoxLayout(actions, BoxLayout.X_AXIS));
+        actions.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
         actions.add(editButton);
-        actions.add(Box.createHorizontalStrut(Scale.s(8)));
+        actions.add(Box.createHorizontalStrut(Scale.s(12)));
         actions.add(open);
-        actions.add(Box.createHorizontalStrut(Scale.s(8)));
+        actions.add(Box.createHorizontalStrut(Scale.s(12)));
         actions.add(deleteButton);
 
         add(nameHolder, BorderLayout.CENTER);
@@ -195,6 +200,9 @@ public class NewCard extends JPanel {
 
     /** Small dark pill button, matching the "Add New" button's look in App.java. */
     private static final class PillButton extends JButton {
+        private static final int ACTION_WIDTH = 112;
+        private static final int ACTION_HEIGHT = 38;
+
         PillButton(String text) {
             super(text);
             setForeground(Color.WHITE);
@@ -203,14 +211,20 @@ public class NewCard extends JPanel {
             setFocusPainted(false);
             setRolloverEnabled(true);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setHorizontalAlignment(SwingConstants.CENTER);
 
-            boolean isPrimaryAction = "Open".equals(text) || "Delete".equals(text);
-            setFont(Theme.font(isPrimaryAction ? 16f : 13f));
+            setFont(Theme.font(13f));
+
+            int width = Scale.s(ACTION_WIDTH);
+            int height = Scale.s(ACTION_HEIGHT);
+            setPreferredSize(new java.awt.Dimension(width, height));
+            setMinimumSize(new java.awt.Dimension(width, height));
+            setMaximumSize(new java.awt.Dimension(width, height));
             setBorder(BorderFactory.createEmptyBorder(
-                    Scale.s(isPrimaryAction ? 10 : 7),
-                    Scale.s(isPrimaryAction ? 24 : 18),
-                    Scale.s(isPrimaryAction ? 10 : 7),
-                    Scale.s(isPrimaryAction ? 24 : 18)));
+                    Scale.s(8),
+                    Scale.s(18),
+                    Scale.s(8),
+                    Scale.s(18)));
         }
 
         @Override
