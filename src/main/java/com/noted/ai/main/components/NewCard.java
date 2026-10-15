@@ -6,13 +6,11 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Cursor;
-import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
-import java.awt.geom.Path2D;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -40,6 +38,7 @@ public class NewCard extends JPanel {
     public interface Listener {
         void onOpen(NewCard source);
         void onRename(NewCard source, String newName);
+        void onDelete(NewCard source);
     }
 
     private static final String VIEW_LABEL = "label";
@@ -53,10 +52,16 @@ public class NewCard extends JPanel {
     private final JTextField nameField = new JTextField();
 
     private String documentName;
+    private int documentId = -1;
 
     public NewCard(String documentName, Listener listener) {
+        this(documentName, -1, listener);
+    }
+
+    public NewCard(String documentName, int documentId, Listener listener) {
         super(new BorderLayout());
         this.documentName = documentName;
+        this.documentId = documentId;
         this.listener = listener;
 
         setOpaque(false);
@@ -67,6 +72,14 @@ public class NewCard extends JPanel {
 
     public String getDocumentName() {
         return documentName;
+    }
+
+    public int getDocumentId() {
+        return documentId;
+    }
+
+    public void setDocumentId(int documentId) {
+        this.documentId = documentId;
     }
 
     /* ------------------------------------------------------------------
@@ -88,20 +101,8 @@ public class NewCard extends JPanel {
             }
         });
 
-        JButton editButton = new EditIcon();
+        PillButton editButton = new PillButton("Edit");
         editButton.addActionListener(e -> beginRename());
-
-        JPanel labelRow = new JPanel();
-        labelRow.setOpaque(false);
-        labelRow.setLayout(new BoxLayout(labelRow, BoxLayout.X_AXIS));
-        labelRow.add(nameLabel);
-        labelRow.add(Box.createHorizontalStrut(Scale.s(8)));
-        labelRow.add(editButton);
-
-        nameHolder.setOpaque(false);
-        nameHolder.add(labelRow, VIEW_LABEL);
-        nameHolder.add(nameField, VIEW_EDIT);
-        nameSwap.show(nameHolder, VIEW_LABEL);
 
         PillButton open = new PillButton("Open");
         open.addActionListener(e -> {
@@ -110,12 +111,34 @@ public class NewCard extends JPanel {
             }
         });
 
-        JPanel openHolder = new JPanel();
-        openHolder.setOpaque(false);
-        openHolder.add(open);
+        PillButton deleteButton = new PillButton("Delete");
+        deleteButton.addActionListener(e -> {
+            if (listener != null) {
+                listener.onDelete(this);
+            }
+        });
+
+        JPanel labelRow = new JPanel();
+        labelRow.setOpaque(false);
+        labelRow.setLayout(new BoxLayout(labelRow, BoxLayout.X_AXIS));
+        labelRow.add(nameLabel);
+
+        nameHolder.setOpaque(false);
+        nameHolder.add(labelRow, VIEW_LABEL);
+        nameHolder.add(nameField, VIEW_EDIT);
+        nameSwap.show(nameHolder, VIEW_LABEL);
+
+        JPanel actions = new JPanel();
+        actions.setOpaque(false);
+        actions.setLayout(new BoxLayout(actions, BoxLayout.X_AXIS));
+        actions.add(editButton);
+        actions.add(Box.createHorizontalStrut(Scale.s(8)));
+        actions.add(open);
+        actions.add(Box.createHorizontalStrut(Scale.s(8)));
+        actions.add(deleteButton);
 
         add(nameHolder, BorderLayout.CENTER);
-        add(openHolder, BorderLayout.EAST);
+        add(actions, BorderLayout.EAST);
     }
 
     private void beginRename() {
@@ -180,12 +203,14 @@ public class NewCard extends JPanel {
             setFocusPainted(false);
             setRolloverEnabled(true);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            setFont(Theme.font("Open".equals(text) ? 18f : 13f));
+
+            boolean isPrimaryAction = "Open".equals(text) || "Delete".equals(text);
+            setFont(Theme.font(isPrimaryAction ? 16f : 13f));
             setBorder(BorderFactory.createEmptyBorder(
-                    Scale.s("Open".equals(text) ? 10 : 7),
-                    Scale.s("Open".equals(text) ? 22 : 16),
-                    Scale.s("Open".equals(text) ? 10 : 7),
-                    Scale.s("Open".equals(text) ? 22 : 16)));
+                    Scale.s(isPrimaryAction ? 10 : 7),
+                    Scale.s(isPrimaryAction ? 24 : 18),
+                    Scale.s(isPrimaryAction ? 10 : 7),
+                    Scale.s(isPrimaryAction ? 24 : 18)));
         }
 
         @Override
@@ -204,58 +229,4 @@ public class NewCard extends JPanel {
         }
     }
 
-    /** Small pencil glyph button that requests rename mode. */
-    private static final class EditIcon extends JButton {
-        EditIcon() {
-            setContentAreaFilled(false);
-            setBorderPainted(false);
-            setFocusPainted(false);
-            setRolloverEnabled(true);
-            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        }
-
-        @Override
-        public Dimension getPreferredSize() {
-            int d = Scale.s(18);
-            return new Dimension(d, d);
-        }
-
-        @Override
-        public Dimension getMinimumSize() {
-            return getPreferredSize();
-        }
-
-        @Override
-        public Dimension getMaximumSize() {
-            return getPreferredSize();
-        }
-
-        @Override
-        protected void paintComponent(Graphics g) {
-            Graphics2D g2 = smooth(g);
-            g2.setColor(getModel().isRollover() ? Theme.PANEL_DARK : Theme.TEXT_MUTED);
-            g2.setStroke(new BasicStroke(Math.max(1f, Scale.sf(1.4)),
-                    BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-
-            float w = getWidth();
-            float h = getHeight();
-
-            Path2D.Float body = new Path2D.Float();
-            body.moveTo(w * 0.18f, h * 0.82f);
-            body.lineTo(w * 0.64f, h * 0.36f);
-            g2.draw(body);
-
-            Path2D.Float tip = new Path2D.Float();
-            tip.moveTo(w * 0.64f, h * 0.36f);
-            tip.lineTo(w * 0.82f, h * 0.18f);
-            g2.draw(tip);
-
-            Path2D.Float mark = new Path2D.Float();
-            mark.moveTo(w * 0.16f, h * 0.86f);
-            mark.lineTo(w * 0.30f, h * 0.86f);
-            g2.draw(mark);
-
-            g2.dispose();
-        }
-    }
 }

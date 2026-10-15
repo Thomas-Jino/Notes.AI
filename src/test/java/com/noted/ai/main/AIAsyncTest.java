@@ -1,10 +1,13 @@
 package com.noted.ai.main;
 
+import java.sql.SQLException;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 class AIAsyncTest {
@@ -29,5 +32,35 @@ class AIAsyncTest {
         assertNotNull(analysis);
         assertEquals("Happy", analysis.getEmotion());
         assertEquals(10, analysis.getIntensity());
+    }
+
+    @Test
+    void findAllDocuments_keepsOnlyLatestDuplicateTitle() throws SQLException {
+        Database.initialize();
+        Database.saveDocument("Duplicate Title", "Old content");
+
+        Database.Document first = Database.findDocumentByTitle("Duplicate Title");
+        assertNotNull(first);
+
+        Database.saveDocument("Duplicate Title", "New content");
+        List<Database.Document> documents = Database.findAllDocuments();
+
+        boolean seenLatestOnly = documents.stream()
+                .filter(doc -> "Duplicate Title".equals(doc.getTitle()))
+                .count() == 1;
+
+        Database.Document latest = Database.findDocumentByTitle("Duplicate Title");
+        assertTrue(seenLatestOnly);
+        assertEquals("New content", latest.getContent());
+    }
+
+    @Test
+    void deleteDocument_removesExistingRecord() throws SQLException {
+        Database.initialize();
+        int id = Database.saveDocument("Delete Me", "content");
+
+        Database.deleteDocument(id);
+
+        assertEquals(null, Database.findDocumentById(id));
     }
 }

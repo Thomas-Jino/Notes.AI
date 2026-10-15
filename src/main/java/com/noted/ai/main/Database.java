@@ -42,32 +42,44 @@ public class Database {
              Statement stmt = conn.createStatement()) {
             stmt.executeUpdate(documentSql);
             stmt.executeUpdate(emotionSql);
+            cleanupDuplicateDocumentTitles(conn);
+            stmt.executeUpdate("CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_title_unique ON documents(title)");
+        }
+    }
+
+    private static void cleanupDuplicateDocumentTitles(Connection conn) throws SQLException {
+        String deleteDuplicatesSql = "DELETE FROM documents WHERE id NOT IN ("
+                + "SELECT id FROM ("
+                + "SELECT id FROM documents d1 WHERE d1.id = ("
+                + "SELECT d2.id FROM documents d2 WHERE d2.title = d1.title "
+                + "ORDER BY d2.created_at DESC, d2.id DESC LIMIT 1)"
+                + ")"
+                + ")";
+
+        try (Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate(deleteDuplicatesSql);
         }
     }
 
     public static int saveDocument(String title, String content) throws SQLException {
         initialize();
-        String sql = "INSERT INTO documents (title, content) VALUES (?, ?)";
+        String sql = "INSERT INTO documents (title, content, created_at) VALUES (?, ?, CURRENT_TIMESTAMP) "
+                + "ON CONFLICT(title) DO UPDATE SET content = excluded.content, created_at = CURRENT_TIMESTAMP";
 
         try (Connection conn = getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+             PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, title);
             ps.setString(2, content);
             ps.executeUpdate();
-
-            try (ResultSet rs = ps.getGeneratedKeys()) {
-                if (rs.next()) {
-                    return rs.getInt(1);
-                }
-            }
         }
 
-        throw new SQLException("Failed to generate a document id.");
+        return findLatestDocumentByTitle(title).getId();
     }
 
     public static void saveEmotion(int documentId, String emotion, int intensity) throws SQLException {
         initialize();
-        String sql = "INSERT INTO emotions_intensity (id, emotion, intensity) VALUES (?, ?, ?)";
+        String sql = "INSERT INTO emotions_intensity (id, emotion, intensity) VALUES (?, ?, ?) "
+                + "ON CONFLICT(id) DO UPDATE SET emotion = excluded.emotion, intensity = excluded.intensity";
 
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -91,6 +103,7 @@ public class Database {
     }
 
     public static void deleteDocument(int id) throws SQLException {
+        initialize();
         String sql = "DELETE FROM documents WHERE id = ?";
 
         try (Connection conn = getConnection();
@@ -100,9 +113,23 @@ public class Database {
         }
     }
 
+    public static void deleteDocumentByTitle(String title) throws SQLException {
+        initialize();
+        String sql = "DELETE FROM documents WHERE title = ?";
+
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, title);
+            ps.executeUpdate();
+        }
+    }
+
     public static List<Document> findAllDocuments() throws SQLException {
         List<Document> documents = new ArrayList<>();
-        String sql = "SELECT id, title, content FROM documents ORDER BY id DESC";
+        String sql = "SELECT id, title, content FROM documents d "
+                + "WHERE id = (SELECT d2.id FROM documents d2 WHERE d2.title = d.title "
+                + "ORDER BY d2.created_at DESC, d2.id DESC LIMIT 1) "
+                + "ORDER BY created_at DESC, id DESC";
 
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
@@ -117,6 +144,51 @@ public class Database {
         }
 
         return documents;
+    }
+
+    public static Document findDocumentById(int id) throws SQLException {
+        String sql = "SELECT id, title, content FROM documents WHERE id = ? LIMIT 1";
+
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return new Document(
+                            rs.getInt("id"),
+                            rs.getString("title"),
+                            rs.getString("content")
+                    );
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public static Document findDocumentByTitle(String title) throws SQLException {
+        String sql = "SELECT id, title, content FROM documents WHERE title = ? "
+                + "ORDER BY created_at DESC, id DESC LIMIT 1";
+
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, title);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return new Document(
+                            rs.getInt("id"),
+                            rs.getString("title"),
+                            rs.getString("content")
+                    );
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public static Document findLatestDocumentByTitle(String title) throws SQLException {
+        return findDocumentByTitle(title);
     }
 
     public static void main(String[] args) {
