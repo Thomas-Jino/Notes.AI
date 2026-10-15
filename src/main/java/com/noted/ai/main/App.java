@@ -60,6 +60,21 @@ public final class App {
     private final JButton addNewButton;
     private final DocumentsPanel documentsPanel;
     private final ChatPanel chatPanel;
+    private final JPanel leftPanel;
+    private JSplitPane mainSplit;
+    private Consumer<DocumentSave> onSaveDocument;
+    private Runnable onCancelDocument;
+
+    public static final class DocumentSave {
+        private final String title;
+        private final String content;
+        public DocumentSave(String title, String content) {
+            this.title = title;
+            this.content = content;
+        }
+        public String getTitle() { return title; }
+        public String getContent() { return content; }
+    }
 
     private App() {
         installLookAndFeel();
@@ -72,11 +87,12 @@ public final class App {
 
         documentsPanel = new DocumentsPanel();
         chatPanel = new ChatPanel();
-
         addNewButton = new PillButton("Add New");
+        leftPanel = buildLeftPanel();
 
         final JSplitPane split = new JSplitPane(
-                JSplitPane.HORIZONTAL_SPLIT, buildLeftPanel(), buildRightPanel());
+                JSplitPane.HORIZONTAL_SPLIT, leftPanel, buildRightPanel());
+        mainSplit = split;
         split.setResizeWeight(SPLIT_RATIO);
         split.setContinuousLayout(true);
         split.setDividerSize(0);
@@ -130,6 +146,84 @@ public final class App {
 
     public void setOnSendMessage(Consumer<String> handler) {
         chatPanel.setOnSend(handler);
+    }
+
+    public void setOnSaveDocument(Consumer<DocumentSave> handler) {
+        onSaveDocument = handler;
+    }
+
+    public void setOnCancelDocument(Runnable handler) {
+        onCancelDocument = handler;
+    }
+
+    public void showDocumentEditor(String title, String content) {
+        mainSplit.setLeftComponent(buildDocumentEditor(title, content));
+        mainSplit.revalidate();
+        mainSplit.repaint();
+    }
+
+    public void showDocuments() {
+        mainSplit.setLeftComponent(leftPanel);
+        mainSplit.revalidate();
+        mainSplit.repaint();
+    }
+
+    private JPanel buildDocumentEditor(String title, String content) {
+        JPanel editor = new JPanel(new BorderLayout(0, Scale.s(20)));
+        editor.setBackground(Theme.CARD_BG);
+        Scale.padding(editor, 40, 45, 34, 45);
+
+        JLabel heading = new JLabel("Notepad");
+        heading.setForeground(Theme.TEXT_DARK);
+        Scale.font(heading, 32);
+        JLabel documentTitle = new JLabel(title);
+        documentTitle.setForeground(Theme.TEXT_MUTED);
+        Scale.font(documentTitle, 15);
+
+        JPanel header = new JPanel();
+        header.setOpaque(false);
+        header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
+        heading.setAlignmentX(Component.LEFT_ALIGNMENT);
+        documentTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+        header.add(heading);
+        header.add(new Gap(8, true));
+        header.add(documentTitle);
+        editor.add(header, BorderLayout.NORTH);
+
+        JTextArea note = new JTextArea(content == null ? "" : content);
+        note.setLineWrap(true);
+        note.setWrapStyleWord(true);
+        note.setForeground(Theme.TEXT_DARK);
+        note.setCaretColor(Theme.TEXT_DARK);
+        note.setBackground(Theme.CARD_BG);
+        note.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
+        Scale.font(note, 17);
+
+        RoundedPanel paper = new RoundedPanel(18, Theme.FIELD_BORDER);
+        paper.setBackground(Theme.CARD_BG);
+        paper.setLayout(new BorderLayout());
+        JScrollPane noteScroll = new JScrollPane(note);
+        noteScroll.setBorder(null);
+        noteScroll.getViewport().setBackground(Theme.CARD_BG);
+        paper.add(noteScroll, BorderLayout.CENTER);
+        editor.add(paper, BorderLayout.CENTER);
+
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, Scale.s(12), 0));
+        actions.setOpaque(false);
+        JButton cancel = new PillButton("Cancel");
+        JButton save = new PillButton("Save");
+        Scale.font(cancel, 15);
+        Scale.font(save, 15);
+        Scale.padding(cancel, 10, 22, 10, 22);
+        Scale.padding(save, 10, 24, 10, 24);
+        cancel.addActionListener(e -> { if (onCancelDocument != null) onCancelDocument.run(); });
+        save.addActionListener(e -> {
+            if (onSaveDocument != null) onSaveDocument.accept(new DocumentSave(title, note.getText()));
+        });
+        actions.add(cancel);
+        actions.add(save);
+        editor.add(actions, BorderLayout.SOUTH);
+        return editor;
     }
 
     public void addDocumentCard(JComponent card) {

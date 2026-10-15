@@ -37,6 +37,8 @@ public class Main {
     private void wireView() {
         view.setOnAddNewDocument(this::handleAddNewDocument);
         view.setOnSendMessage(this::handleSendMessage);
+        view.setOnSaveDocument(this::handleSaveDocument);
+        view.setOnCancelDocument(view::showDocuments);
     }
 
     /* ------------------------------------------------------------------
@@ -62,13 +64,27 @@ public class Main {
     }
 
     private void handleOpenDocument(NewCard source) {
-        // TODO: open the real document editor for source.getDocumentName().
-        System.out.println("Open requested: " + source.getDocumentName());
+        view.showDocumentEditor(source.getDocumentName(), "");
     }
 
     private void handleRenameDocument(NewCard source, String newName) {
-        // TODO: persist the rename via Database.java once that wiring exists.
-        System.out.println("Renamed " + source.getDocumentName() + " to: " + newName);
+        System.out.println("Renamed document to: " + newName);
+    }
+
+    private void handleSaveDocument(App.DocumentSave document) {
+        try {
+            AI.EmotionAnalysis analysis = AI.analyzeEmotions(document.getContent());
+            int documentId = Database.saveDocument(document.getTitle(), document.getContent());
+            Database.saveEmotion(documentId, analysis.getEmotion(), analysis.getIntensity());
+
+            System.out.println("Saved document: " + document.getTitle());
+            System.out.println("Emotion: " + analysis.getEmotion() + " | Intensity: " + analysis.getIntensity());
+        } catch (Exception ex) {
+            System.err.println("Unable to save document with emotion analysis: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+
+        view.showDocuments();
     }
 
     /* ------------------------------------------------------------------

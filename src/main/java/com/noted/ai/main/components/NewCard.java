@@ -180,8 +180,12 @@ public class NewCard extends JPanel {
             setFocusPainted(false);
             setRolloverEnabled(true);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            setFont(Theme.font(13f));
-            setBorder(BorderFactory.createEmptyBorder(Scale.s(7), Scale.s(16), Scale.s(7), Scale.s(16)));
+            setFont(Theme.font("Open".equals(text) ? 18f : 13f));
+            setBorder(BorderFactory.createEmptyBorder(
+                    Scale.s("Open".equals(text) ? 10 : 7),
+                    Scale.s("Open".equals(text) ? 22 : 16),
+                    Scale.s("Open".equals(text) ? 10 : 7),
+                    Scale.s("Open".equals(text) ? 22 : 16)));
         }
 
         @Override
