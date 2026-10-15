@@ -35,6 +35,20 @@ class AIAsyncTest {
     }
 
     @Test
+    void buildPromptWithDocuments_includesSavedDocumentContext() throws SQLException {
+        Database.initialize();
+        Database.saveDocument("Project Plan", "Ship in 2 weeks.");
+        Database.saveDocument("Meeting Notes", "Need more tests.");
+
+        String prompt = AI.buildPromptWithDocuments("Summarize my notes");
+
+        assertTrue(prompt.contains("Project Plan"));
+        assertTrue(prompt.contains("Ship in 2 weeks."));
+        assertTrue(prompt.contains("Meeting Notes"));
+        assertTrue(prompt.contains("User question: Summarize my notes"));
+    }
+
+    @Test
     void findAllDocuments_keepsOnlyLatestDuplicateTitle() throws SQLException {
         Database.initialize();
         Database.saveDocument("Duplicate Title", "Old content");

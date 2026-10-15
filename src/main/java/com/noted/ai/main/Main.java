@@ -185,8 +185,10 @@ public class Main {
         view.appendUserMessage(text);
         view.beginAssistantThinking();
 
+        String contextualPrompt = AI.buildPromptWithDocuments(text);
+
         AI.streamMessage(
-                text,
+                contextualPrompt,
                 token -> SwingUtilities.invokeLater(() -> view.appendAssistantChunk(token)),
                 () -> SwingUtilities.invokeLater(() -> view.finishAssistantResponse()),
                 error -> SwingUtilities.invokeLater(() -> {

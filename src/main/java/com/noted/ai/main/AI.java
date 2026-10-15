@@ -1,6 +1,8 @@
 package com.noted.ai.main;
 
+import java.sql.SQLException;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -59,6 +61,38 @@ public class AI {
                 .modelName(OLLAMA_MODEL_NAME)
                 .timeout(OLLAMA_TIMEOUT)
                 .build();
+    }
+
+    public static String buildPromptWithDocuments(String userText) {
+        if (userText == null || userText.isBlank()) {
+            return userText == null ? "" : userText;
+        }
+
+        try {
+            Database.initialize();
+            List<Database.Document> documents = Database.findAllDocuments();
+            if (documents == null || documents.isEmpty()) {
+                return userText;
+            }
+
+            StringBuilder prompt = new StringBuilder();
+            prompt.append("Use the saved documents below as context for your answer. "
+                    + "Answer the user's question using the documents when relevant.\n\n");
+
+            for (Database.Document document : documents) {
+                prompt.append("Document: ").append(document.getTitle()).append("\n");
+                String content = document.getContent() == null ? "" : document.getContent().trim();
+                if (!content.isEmpty()) {
+                    prompt.append(content).append("\n\n");
+                }
+            }
+
+            prompt.append("User question: ").append(userText).append("\n");
+            return prompt.toString();
+        } catch (SQLException ex) {
+            System.err.println("Unable to load saved documents for AI context: " + ex.getMessage());
+            return userText;
+        }
     }
 
     public static CompletableFuture<String> sendMessageAsync(String text) {
