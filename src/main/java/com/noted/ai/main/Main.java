@@ -56,6 +56,7 @@ public class Main {
             throw new IllegalStateException("Main controller failed to initialize");
         }
         controller.loadExistingDocuments();
+        controller.view.refreshMoodSummary();
     }
 
     private void wireView() {
@@ -131,6 +132,7 @@ public class Main {
                 });
                 view.addDocumentCard(card);
             }
+            view.refreshMoodSummary();
         } catch (Exception ex) {
             System.err.println("Unable to load existing documents: " + ex.getMessage());
             ex.printStackTrace();
@@ -198,6 +200,7 @@ public class Main {
         }
 
         view.showDocuments();
+        view.refreshMoodSummary();
     }
 
     /* ------------------------------------------------------------------

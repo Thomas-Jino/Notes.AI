@@ -134,6 +134,31 @@ public class Database {
         }
     }
 
+    public static List<MoodSummary> findMoodSummaryLastTwoWeeks() throws SQLException {
+        initialize();
+        String sql = "SELECT e.emotion, AVG(e.intensity) AS avg_intensity, COUNT(*) AS entries "
+                + "FROM emotions_intensity e "
+                + "JOIN documents d ON d.id = e.id "
+                + "WHERE d.created_at >= datetime('now', '-14 days') "
+                + "GROUP BY e.emotion "
+                + "ORDER BY avg_intensity DESC, e.emotion ASC";
+
+        List<MoodSummary> summaries = new ArrayList<>();
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                summaries.add(new MoodSummary(
+                        rs.getString("emotion"),
+                        rs.getDouble("avg_intensity"),
+                        rs.getInt("entries")
+                ));
+            }
+        }
+
+        return summaries;
+    }
+
     public static List<Document> findAllDocuments() throws SQLException {
         List<Document> documents = new ArrayList<>();
         String sql = "SELECT id, title, content FROM documents d "
@@ -212,6 +237,30 @@ public class Database {
             }
         } catch (SQLException e) {
             e.printStackTrace();
+        }
+    }
+
+    public static final class MoodSummary {
+        private final String emotion;
+        private final double averageIntensity;
+        private final int entries;
+
+        public MoodSummary(String emotion, double averageIntensity, int entries) {
+            this.emotion = emotion;
+            this.averageIntensity = averageIntensity;
+            this.entries = entries;
+        }
+
+        public String getEmotion() {
+            return emotion;
+        }
+
+        public double getAverageIntensity() {
+            return averageIntensity;
+        }
+
+        public int getEntries() {
+            return entries;
         }
     }
 

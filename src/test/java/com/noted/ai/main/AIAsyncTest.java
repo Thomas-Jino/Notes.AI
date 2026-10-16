@@ -62,6 +62,19 @@ class AIAsyncTest {
     }
 
     @Test
+    void tryCreateNoteFromUserRequest_createsANote_whenUserSaysStoreItAsAppIdea() throws SQLException {
+        Database.initialize();
+
+        boolean created = Main.tryCreateNoteFromUserRequest(
+                "I am planning to build a new python program that accept the users age and check whether they are legal adult or not, write the code for it and store it as app idea");
+
+        assertTrue(created);
+        Database.Document document = Database.findDocumentByTitle("App Idea");
+        assertNotNull(document);
+        assertTrue(document.getContent().contains("python program"));
+    }
+
+    @Test
     void tryDeleteNoteFromUserRequest_deletesANoteByTitle() throws SQLException {
         Database.initialize();
         Database.saveDocument("Delete Me", "content");
@@ -91,6 +104,23 @@ class AIAsyncTest {
         assertNotNull(intent);
         assertEquals("delete_note", intent.getAction());
         assertEquals("all notes", intent.getTitle());
+    }
+
+    @Test
+    void findMoodSummaryLastTwoWeeks_averagesSameEmotionIntensity() throws SQLException {
+        Database.initialize();
+        int happyOne = Database.saveDocument("Happy Day 1", "A");
+        int happyTwo = Database.saveDocument("Happy Day 2", "B");
+        int sadOne = Database.saveDocument("Sad Day 1", "C");
+
+        Database.saveEmotion(happyOne, "Happy", 8);
+        Database.saveEmotion(happyTwo, "Happy", 2);
+        Database.saveEmotion(sadOne, "Sad", 5);
+
+        List<Database.MoodSummary> summary = Database.findMoodSummaryLastTwoWeeks();
+
+        assertTrue(summary.stream().anyMatch(item -> "Happy".equals(item.getEmotion()) && Math.abs(5.0 - item.getAverageIntensity()) < 0.001));
+        assertTrue(summary.stream().anyMatch(item -> "Sad".equals(item.getEmotion()) && Math.abs(5.0 - item.getAverageIntensity()) < 0.001));
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.noted.ai.main;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -142,9 +143,35 @@ public class AI {
             return null;
         }
 
+        String normalized = userText.trim();
+        String lower = normalized.toLowerCase(Locale.ROOT);
+
+        if ((lower.contains("store it as app idea")
+                || lower.contains("save it as app idea")
+                || lower.contains("save as app idea")
+                || lower.contains("store as app idea")
+                || lower.contains("write the code") && lower.contains("app idea")
+                || lower.contains("save this as") && lower.contains("app idea")
+                || lower.contains("store this as") && lower.contains("app idea"))) {
+            return new CreateNoteIntent("create_note", "App Idea", normalized);
+        }
+
+        if ((lower.contains("store it as") || lower.contains("save it as")
+                || lower.contains("store as") || lower.contains("save as"))
+                && (lower.contains("note") || lower.contains("document") || lower.contains("idea") || lower.contains("app"))) {
+            String title = "Document";
+            if (lower.contains("idea") || lower.contains("app idea")) {
+                title = "App Idea";
+            } else if (lower.contains("note")) {
+                title = "Note";
+            }
+            return new CreateNoteIntent("create_note", title, normalized);
+        }
+
         String prompt = "Decide whether the user is asking to create a new note. "
                 + "If yes, return JSON only in this exact form and nothing else: "
                 + "{\"action\":\"create_note\",\"title\":\"note title\",\"content\":\"note text\"}. "
+                + "When the user says to save or store an app idea or code snippet, treat it as a create_note action with title \"App Idea\". "
                 + "If the user is not asking to create a note, return: {\"action\":\"chat\"}. "
                 + "Do not explain yourself. Use the user's exact note title and content when supplied. "
                 + "User request: " + userText;

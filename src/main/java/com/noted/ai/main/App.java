@@ -18,6 +18,9 @@ import java.awt.RenderingHints;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.geom.Path2D;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 import javax.swing.BorderFactory;
@@ -28,6 +31,7 @@ import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
@@ -61,7 +65,8 @@ public final class App {
     private final DocumentsPanel documentsPanel;
     private final ChatPanel chatPanel;
     private final JPanel leftPanel;
-    private JSplitPane mainSplit;
+    private final JComponent moodCardContainer;
+    private final JSplitPane mainSplit;
     private Consumer<DocumentSave> onSaveDocument;
     private Runnable onCancelDocument;
 
@@ -89,6 +94,7 @@ public final class App {
         chatPanel = new ChatPanel();
         addNewButton = new PillButton("Add New");
         leftPanel = buildLeftPanel();
+        moodCardContainer = buildMoodCard();
 
         final JSplitPane split = new JSplitPane(
                 JSplitPane.HORIZONTAL_SPLIT, leftPanel, buildRightPanel());
@@ -166,6 +172,29 @@ public final class App {
         mainSplit.setLeftComponent(leftPanel);
         mainSplit.revalidate();
         mainSplit.repaint();
+    }
+
+    public void refreshMoodSummary() {
+        SwingUtilities.invokeLater(() -> {
+            try {
+                List<Database.MoodSummary> moods = Database.findMoodSummaryLastTwoWeeks();
+                moodCardContainer.removeAll();
+                moodCardContainer.setLayout(new BorderLayout());
+                if (moods == null || moods.isEmpty()) {
+                    moodCardContainer.add(buildMoodCard(), BorderLayout.CENTER);
+                } else {
+                    moodCardContainer.add(buildMoodSummaryCard(moods), BorderLayout.CENTER);
+                }
+                moodCardContainer.revalidate();
+                moodCardContainer.repaint();
+            } catch (SQLException ex) {
+                moodCardContainer.removeAll();
+                moodCardContainer.setLayout(new BorderLayout());
+                moodCardContainer.add(buildMoodCard(), BorderLayout.CENTER);
+                moodCardContainer.revalidate();
+                moodCardContainer.repaint();
+            }
+        });
     }
 
     private JPanel buildDocumentEditor(String title, String content) {
@@ -347,7 +376,7 @@ public final class App {
         JPanel cards = new JPanel(new BorderLayout());
         cards.setOpaque(false);
         Scale.vgap(cards, 22);
-        cards.add(buildMoodCard(), BorderLayout.NORTH);
+        cards.add(moodCardContainer, BorderLayout.NORTH);
         cards.add(chatPanel, BorderLayout.CENTER);
 
         right.add(cards, BorderLayout.CENTER);
@@ -378,6 +407,72 @@ public final class App {
 
         card.add(stack);
         return card;
+    }
+
+    private JPanel buildMoodSummaryCard(List<Database.MoodSummary> moods) {
+        RoundedPanel card = new RoundedPanel(26, null);
+        card.setBackground(Theme.CARD_BG);
+        card.setLayout(new BorderLayout(0, Scale.s(14)));
+        Scale.padding(card, 18, 18, 18, 18);
+
+        JLabel header = new JLabel("Last 2 weeks");
+        header.setForeground(Theme.TEXT_DARK);
+        Scale.font(header, 18);
+        card.add(header, BorderLayout.NORTH);
+
+        JPanel list = new JPanel();
+        list.setOpaque(false);
+        list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
+
+        for (Database.MoodSummary mood : moods) {
+            JPanel row = new JPanel(new BorderLayout(10, 6));
+            row.setOpaque(false);
+
+            JLabel label = new JLabel(mood.getEmotion() + " • " + String.format(Locale.US, "%.1f", mood.getAverageIntensity()));
+            label.setForeground(Theme.TEXT_DARK);
+            Scale.font(label, 15);
+
+            JProgressBar bar = new JProgressBar(0, 10);
+            bar.setValue(Math.max(1, (int) Math.round(mood.getAverageIntensity())));
+            bar.setStringPainted(true);
+            bar.setString(String.format(Locale.US, "%.1f", mood.getAverageIntensity()));
+            bar.setForeground(moodColor(mood.getEmotion()));
+            bar.setBackground(new Color(233, 235, 240));
+            bar.setBorderPainted(false);
+            bar.setOpaque(false);
+
+            row.add(label, BorderLayout.NORTH);
+            row.add(bar, BorderLayout.CENTER);
+            list.add(row);
+            list.add(Box.createVerticalStrut(Scale.s(10)));
+        }
+
+        card.add(new JScrollPane(list) {
+            {
+                setBorder(null);
+                getViewport().setBackground(Theme.CARD_BG);
+            }
+        }, BorderLayout.CENTER);
+
+        return card;
+    }
+
+    private Color moodColor(String emotion) {
+        if (emotion == null) {
+            return new Color(122, 130, 148);
+        }
+        switch (emotion.toLowerCase(Locale.ROOT)) {
+            case "happy": return new Color(48, 196, 122);
+            case "sad": return new Color(96, 140, 255);
+            case "angry": return new Color(234, 88, 88);
+            case "tense": return new Color(245, 158, 11);
+            case "calm": return new Color(59, 130, 246);
+            case "excited": return new Color(168, 85, 247);
+            case "fearful": return new Color(107, 114, 128);
+            case "disgusted": return new Color(34, 197, 94);
+            case "surprised": return new Color(251, 146, 60);
+            default: return new Color(122, 130, 148);
+        }
     }
 
     /** Vertical stack of centred muted lines, used by both empty states. */
