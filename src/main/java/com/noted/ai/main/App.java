@@ -892,6 +892,9 @@ public final class App {
         }
 
         void addCard(JComponent card) {
+            if (card instanceof com.noted.ai.main.components.NewCard newCard) {
+                newCard.resetToLabelView();
+            }
             if (cardColumn.getComponentCount() > 0) {
                 cardColumn.add(new Gap(12, true));
             }
@@ -940,6 +943,12 @@ public final class App {
 
         private void refresh() {
             int count = getCardCount();
+            for (Component child : cardColumn.getComponents()) {
+                if (child instanceof com.noted.ai.main.components.NewCard card) {
+                    card.resetToLabelView();
+                    card.setVisible(true);
+                }
+            }
             chevron.setVisible(count > COMPACT_ROWS);
             if (count == 0) {
                 expanded = false;
@@ -947,6 +956,8 @@ public final class App {
             }
             updateScrollHeight();
             layout.show(this, count == 0 ? EMPTY_CARD : LIST_CARD);
+            cardColumn.revalidate();
+            cardColumn.repaint();
             revalidate();
             repaint();
         }

@@ -89,6 +89,34 @@ public class NewCard extends JPanel {
         this.documentId = documentId;
     }
 
+    public void resetToLabelView() {
+        nameSwap.show(nameHolder, VIEW_LABEL);
+        setActionPanelVisibility(true, false);
+        SwingUtilities.invokeLater(() -> {
+            nameHolder.revalidate();
+            nameHolder.repaint();
+            NewCard.this.revalidate();
+            NewCard.this.repaint();
+        });
+    }
+
+    private void setActionPanelVisibility(boolean labelVisible, boolean editVisible) {
+        if (actionsLabelPanel != null) {
+            actionsLabelPanel.setVisible(labelVisible);
+            for (java.awt.Component child : actionsLabelPanel.getComponents()) {
+                child.setVisible(labelVisible);
+            }
+        }
+        if (actionsEditPanel != null) {
+            actionsEditPanel.setVisible(editVisible);
+            for (java.awt.Component child : actionsEditPanel.getComponents()) {
+                child.setVisible(editVisible);
+            }
+        }
+        nameHolder.setVisible(true);
+        NewCard.this.setVisible(true);
+    }
+
     /* ------------------------------------------------------------------
      * Layout
      * ------------------------------------------------------------------ */
@@ -140,7 +168,7 @@ public class NewCard extends JPanel {
         nameHolder.setOpaque(false);
         nameHolder.add(viewLabel, VIEW_LABEL);
         nameHolder.add(viewEdit, VIEW_EDIT);
-        nameSwap.show(nameHolder, VIEW_LABEL);
+        resetToLabelView();
 
         add(nameHolder, BorderLayout.CENTER);
     }
@@ -164,6 +192,7 @@ public class NewCard extends JPanel {
     private void beginRename() {
         nameField.setText(documentName);
         nameSwap.show(nameHolder, VIEW_EDIT);
+        setActionPanelVisibility(false, true);
         SwingUtilities.invokeLater(() -> {
             nameField.requestFocusInWindow();
             nameField.selectAll();
@@ -177,6 +206,7 @@ public class NewCard extends JPanel {
     private void commitRename() {
         String candidate = nameField.getText().trim();
         nameSwap.show(nameHolder, VIEW_LABEL);
+        setActionPanelVisibility(true, false);
 
         if (candidate.isEmpty() || candidate.equals(documentName)) {
             // ensure layout updates even when nothing changed
