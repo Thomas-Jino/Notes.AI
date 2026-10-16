@@ -21,7 +21,6 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
-import javax.swing.SwingUtilities;
 
 import com.noted.ai.main.Scale;
 import com.noted.ai.main.Theme;
@@ -53,10 +52,9 @@ public class NewCard extends JPanel {
     private final Listener listener;
     private final CardLayout nameSwap = new CardLayout();
     private final JPanel nameHolder = new JPanel(nameSwap);
+    private final JPanel actionPanel = createActionsPanel();
     private final JLabel nameLabel = new JLabel();
     private final JTextField nameField = new JTextField();
-    private JPanel actionsLabelPanel;
-    private JPanel actionsEditPanel;
 
     private String documentName;
     private int documentId = -1;
@@ -91,30 +89,10 @@ public class NewCard extends JPanel {
 
     public void resetToLabelView() {
         nameSwap.show(nameHolder, VIEW_LABEL);
-        setActionPanelVisibility(true, false);
-        SwingUtilities.invokeLater(() -> {
-            nameHolder.revalidate();
-            nameHolder.repaint();
-            NewCard.this.revalidate();
-            NewCard.this.repaint();
-        });
-    }
-
-    private void setActionPanelVisibility(boolean labelVisible, boolean editVisible) {
-        if (actionsLabelPanel != null) {
-            actionsLabelPanel.setVisible(labelVisible);
-            for (java.awt.Component child : actionsLabelPanel.getComponents()) {
-                child.setVisible(labelVisible);
-            }
-        }
-        if (actionsEditPanel != null) {
-            actionsEditPanel.setVisible(editVisible);
-            for (java.awt.Component child : actionsEditPanel.getComponents()) {
-                child.setVisible(editVisible);
-            }
-        }
-        nameHolder.setVisible(true);
-        NewCard.this.setVisible(true);
+        nameHolder.revalidate();
+        nameHolder.repaint();
+        NewCard.this.revalidate();
+        NewCard.this.repaint();
     }
 
     /* ------------------------------------------------------------------
@@ -136,24 +114,16 @@ public class NewCard extends JPanel {
             }
         });
 
-        // Create persistent action panels for label/edit so buttons don't disappear
-        actionsLabelPanel = createActionsPanel();
-        actionsEditPanel = createActionsPanel();
-
         JPanel labelRow = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, Scale.s(12), 0));
         labelRow.setOpaque(false);
         labelRow.add(nameLabel);
 
-        // Each view (label / edit) gets its own action panel so the buttons can wrap
         JPanel viewLabel = new JPanel(new GridBagLayout());
         viewLabel.setOpaque(false);
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(0, 0, Scale.s(6), 0);
         viewLabel.add(labelRow, gbc);
-        JPanel actions1 = actionsLabelPanel;
-        gbc.gridy = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.insets = new Insets(0, 0, 0, 0);
-        viewLabel.add(actions1, gbc);
 
         JPanel viewEdit = new JPanel(new GridBagLayout());
         viewEdit.setOpaque(false);
@@ -161,9 +131,6 @@ public class NewCard extends JPanel {
         gbc2.gridx = 0; gbc2.gridy = 0; gbc2.weightx = 1.0; gbc2.fill = GridBagConstraints.HORIZONTAL;
         gbc2.insets = new Insets(0, 0, Scale.s(6), 0);
         viewEdit.add(nameField, gbc2);
-        JPanel actions2 = actionsEditPanel;
-        gbc2.gridy = 1; gbc2.weightx = 1.0; gbc2.fill = GridBagConstraints.HORIZONTAL; gbc2.insets = new Insets(0, 0, 0, 0);
-        viewEdit.add(actions2, gbc2);
 
         nameHolder.setOpaque(false);
         nameHolder.add(viewLabel, VIEW_LABEL);
@@ -171,6 +138,7 @@ public class NewCard extends JPanel {
         resetToLabelView();
 
         add(nameHolder, BorderLayout.CENTER);
+        add(actionPanel, BorderLayout.SOUTH);
     }
 
     private JPanel createActionsPanel() {
@@ -192,30 +160,23 @@ public class NewCard extends JPanel {
     private void beginRename() {
         nameField.setText(documentName);
         nameSwap.show(nameHolder, VIEW_EDIT);
-        setActionPanelVisibility(false, true);
-        SwingUtilities.invokeLater(() -> {
-            nameField.requestFocusInWindow();
-            nameField.selectAll();
-            nameHolder.revalidate();
-            nameHolder.repaint();
-            NewCard.this.revalidate();
-            NewCard.this.repaint();
-        });
+        nameField.requestFocusInWindow();
+        nameField.selectAll();
+        nameHolder.revalidate();
+        nameHolder.repaint();
+        NewCard.this.revalidate();
+        NewCard.this.repaint();
     }
 
     private void commitRename() {
         String candidate = nameField.getText().trim();
         nameSwap.show(nameHolder, VIEW_LABEL);
-        setActionPanelVisibility(true, false);
 
         if (candidate.isEmpty() || candidate.equals(documentName)) {
-            // ensure layout updates even when nothing changed
-            SwingUtilities.invokeLater(() -> {
-                nameHolder.revalidate();
-                nameHolder.repaint();
-                NewCard.this.revalidate();
-                NewCard.this.repaint();
-            });
+            nameHolder.revalidate();
+            nameHolder.repaint();
+            NewCard.this.revalidate();
+            NewCard.this.repaint();
             return;
         }
         documentName = candidate;
@@ -223,12 +184,10 @@ public class NewCard extends JPanel {
         if (listener != null) {
             listener.onRename(this, documentName);
         }
-        SwingUtilities.invokeLater(() -> {
-            nameHolder.revalidate();
-            nameHolder.repaint();
-            NewCard.this.revalidate();
-            NewCard.this.repaint();
-        });
+        nameHolder.revalidate();
+        nameHolder.repaint();
+        NewCard.this.revalidate();
+        NewCard.this.repaint();
     }
 
     /* ------------------------------------------------------------------

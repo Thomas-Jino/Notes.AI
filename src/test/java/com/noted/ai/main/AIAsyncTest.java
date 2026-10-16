@@ -73,6 +73,27 @@ class AIAsyncTest {
     }
 
     @Test
+    void tryDeleteNoteFromUserRequest_deletesAllDocuments_whenUserAsksForAllNotes() throws SQLException {
+        Database.initialize();
+        Database.saveDocument("First", "content 1");
+        Database.saveDocument("Second", "content 2");
+
+        boolean deleted = Main.tryDeleteNoteFromUserRequest("Delete all notes.");
+
+        assertTrue(deleted);
+        assertTrue(Database.findAllDocuments().isEmpty());
+    }
+
+    @Test
+    void parseDeleteNoteIntent_acceptsDeleteAllTitle() {
+        AI.DeleteNoteIntent intent = AI.parseDeleteNoteIntent("{\"action\":\"delete_note\",\"title\":\"all notes\"}");
+
+        assertNotNull(intent);
+        assertEquals("delete_note", intent.getAction());
+        assertEquals("all notes", intent.getTitle());
+    }
+
+    @Test
     void findAllDocuments_keepsOnlyLatestDuplicateTitle() throws SQLException {
         Database.initialize();
         Database.saveDocument("Duplicate Title", "Old content");

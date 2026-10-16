@@ -64,4 +64,26 @@ class NewCardTest {
             assertEquals(List.of("Edit", "Open", "Delete"), texts);
         });
     }
+
+    @Test
+    void repeatedDeleteSequence_keepsButtonsVisible() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JPanel container = new JPanel();
+            container.setLayout(new BoxLayout(container, BoxLayout.Y_AXIS));
+            List<NewCard> cards = new ArrayList<>();
+
+            for (int i = 0; i < 4; i++) {
+                NewCard card = new NewCard("Doc " + i, null);
+                container.add(card);
+                cards.add(card);
+            }
+
+            for (int i = 0; i < 3; i++) {
+                container.remove(cards.get(i));
+            }
+
+            List<String> texts = visibleButtonTexts(container);
+            assertEquals(List.of("Edit", "Open", "Delete"), texts);
+        });
+    }
 }

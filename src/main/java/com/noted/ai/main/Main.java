@@ -305,6 +305,11 @@ public class Main {
 
         try {
             Database.initialize();
+            if (isDeleteAllRequest(intent.getTitle())) {
+                Database.deleteAllDocuments();
+                return true;
+            }
+
             Database.Document document = Database.findDocumentByTitle(intent.getTitle());
             if (document == null) {
                 return false;
@@ -315,6 +320,25 @@ public class Main {
             System.err.println("Unable to delete note from user request: " + ex.getMessage());
             return false;
         }
+    }
+
+    private static boolean isDeleteAllRequest(String title) {
+        if (title == null) {
+            return false;
+        }
+
+        String normalized = title.trim().toLowerCase(Locale.ROOT);
+        return normalized.equals("all")
+                || normalized.equals("all notes")
+                || normalized.equals("all documents")
+                || normalized.equals("all my notes")
+                || normalized.equals("all my documents")
+                || normalized.equals("everything")
+                || normalized.endsWith(" all notes")
+                || normalized.endsWith(" all documents")
+                || normalized.contains("delete all")
+                || normalized.contains("all notes")
+                || normalized.contains("all documents");
     }
 
     private static String firstNonBlank(String... values) {
@@ -366,9 +390,13 @@ public class Main {
         if (deleteIntent != null && "delete_note".equalsIgnoreCase(deleteIntent.getAction())
                 && tryDeleteNoteFromUserRequest(text)) {
             String title = deleteIntent.getTitle();
-            if (activeDocumentId > -1) {
+            int previousActiveDocumentId = activeDocumentId;
+
+            if (isDeleteAllRequest(title)) {
+                activeDocumentId = -1;
+            } else if (previousActiveDocumentId > -1) {
                 try {
-                    Database.Document active = Database.findDocumentById(activeDocumentId);
+                    Database.Document active = Database.findDocumentById(previousActiveDocumentId);
                     if (active != null && title.equalsIgnoreCase(active.getTitle())) {
                         activeDocumentId = -1;
                     }
@@ -379,7 +407,11 @@ public class Main {
 
             loadExistingDocuments();
             view.showDocuments();
-            view.appendAssistantMessage("Deleted note \"" + title + "\".");
+            if (isDeleteAllRequest(title)) {
+                view.appendAssistantMessage("Deleted all notes.");
+            } else {
+                view.appendAssistantMessage("Deleted note \"" + title + "\".");
+            }
             return;
         }
 

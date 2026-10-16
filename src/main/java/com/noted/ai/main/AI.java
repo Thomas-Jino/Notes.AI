@@ -161,8 +161,10 @@ public class AI {
         String prompt = "Decide whether the user is asking to delete an existing note. "
                 + "If yes, return JSON only in this exact form and nothing else: "
                 + "{\"action\":\"delete_note\",\"title\":\"note title\"}. "
+                + "If the user is asking to delete all notes or all documents, return: "
+                + "{\"action\":\"delete_note\",\"title\":\"all notes\"}. "
                 + "If the user is not asking to delete a note, return: {\"action\":\"chat\"}. "
-                + "Use the exact note title the user mentions. "
+                + "Use the exact note title the user mentions, or use \"all notes\" when they ask to delete everything. "
                 + "User request: " + userText;
 
         String rawResponse = CHAT_MODEL.generate(prompt);

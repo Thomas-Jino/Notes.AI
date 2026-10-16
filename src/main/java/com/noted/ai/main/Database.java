@@ -124,6 +124,16 @@ public class Database {
         }
     }
 
+    public static void deleteAllDocuments() throws SQLException {
+        initialize();
+        String sql = "DELETE FROM documents";
+
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate(sql);
+        }
+    }
+
     public static List<Document> findAllDocuments() throws SQLException {
         List<Document> documents = new ArrayList<>();
         String sql = "SELECT id, title, content FROM documents d "
