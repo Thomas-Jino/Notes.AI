@@ -49,6 +49,30 @@ class AIAsyncTest {
     }
 
     @Test
+    void tryCreateNoteFromUserRequest_createsANewDocumentWithTitleAndContent() throws SQLException {
+        Database.initialize();
+
+        boolean created = Main.tryCreateNoteFromUserRequest(
+                "Create a new note named \"Trip Ideas\": Plan the weekend trip and bring snacks.");
+
+        assertTrue(created);
+        Database.Document document = Database.findDocumentByTitle("Trip Ideas");
+        assertNotNull(document);
+        assertEquals("Plan the weekend trip and bring snacks.", document.getContent());
+    }
+
+    @Test
+    void tryDeleteNoteFromUserRequest_deletesANoteByTitle() throws SQLException {
+        Database.initialize();
+        Database.saveDocument("Delete Me", "content");
+
+        boolean deleted = Main.tryDeleteNoteFromUserRequest("Delete the note named \"Delete Me\".");
+
+        assertTrue(deleted);
+        assertEquals(null, Database.findDocumentByTitle("Delete Me"));
+    }
+
+    @Test
     void findAllDocuments_keepsOnlyLatestDuplicateTitle() throws SQLException {
         Database.initialize();
         Database.saveDocument("Duplicate Title", "Old content");

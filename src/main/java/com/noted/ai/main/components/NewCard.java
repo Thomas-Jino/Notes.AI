@@ -8,13 +8,14 @@ import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.awt.RenderingHints;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 
 import javax.swing.BorderFactory;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -45,12 +46,17 @@ public class NewCard extends JPanel {
     private static final String VIEW_LABEL = "label";
     private static final String VIEW_EDIT  = "edit";
     private static final double DESIGN_ARC = 16;
+    private static final int ACTION_WIDTH = 112;
+    private static final int ACTION_HEIGHT = 38;
+    
 
     private final Listener listener;
     private final CardLayout nameSwap = new CardLayout();
     private final JPanel nameHolder = new JPanel(nameSwap);
     private final JLabel nameLabel = new JLabel();
     private final JTextField nameField = new JTextField();
+    private JPanel actionsLabelPanel;
+    private JPanel actionsEditPanel;
 
     private String documentName;
     private int documentId = -1;
@@ -102,48 +108,57 @@ public class NewCard extends JPanel {
             }
         });
 
-        PillButton editButton = new PillButton("Edit");
-        editButton.setFont(editButton.getFont().deriveFont(30.0f));
-        editButton.addActionListener(e -> beginRename());
+        // Create persistent action panels for label/edit so buttons don't disappear
+        actionsLabelPanel = createActionsPanel();
+        actionsEditPanel = createActionsPanel();
 
-        PillButton open = new PillButton("Open");
-        open.setFont(open.getFont().deriveFont(30.0f));
-        open.addActionListener(e -> {
-            if (listener != null) {
-                listener.onOpen(this);
-            }
-        });
-
-        PillButton deleteButton = new PillButton("Delete");
-        deleteButton.setFont(deleteButton.getFont().deriveFont(30.0f));
-        deleteButton.addActionListener(e -> {
-            if (listener != null) {
-                listener.onDelete(this);
-            }
-        });
-
-        JPanel labelRow = new JPanel();
+        JPanel labelRow = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, Scale.s(12), 0));
         labelRow.setOpaque(false);
-        labelRow.setLayout(new BoxLayout(labelRow, BoxLayout.X_AXIS));
         labelRow.add(nameLabel);
 
+        // Each view (label / edit) gets its own action panel so the buttons can wrap
+        JPanel viewLabel = new JPanel(new GridBagLayout());
+        viewLabel.setOpaque(false);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(0, 0, Scale.s(6), 0);
+        viewLabel.add(labelRow, gbc);
+        JPanel actions1 = actionsLabelPanel;
+        gbc.gridy = 1; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.insets = new Insets(0, 0, 0, 0);
+        viewLabel.add(actions1, gbc);
+
+        JPanel viewEdit = new JPanel(new GridBagLayout());
+        viewEdit.setOpaque(false);
+        GridBagConstraints gbc2 = new GridBagConstraints();
+        gbc2.gridx = 0; gbc2.gridy = 0; gbc2.weightx = 1.0; gbc2.fill = GridBagConstraints.HORIZONTAL;
+        gbc2.insets = new Insets(0, 0, Scale.s(6), 0);
+        viewEdit.add(nameField, gbc2);
+        JPanel actions2 = actionsEditPanel;
+        gbc2.gridy = 1; gbc2.weightx = 1.0; gbc2.fill = GridBagConstraints.HORIZONTAL; gbc2.insets = new Insets(0, 0, 0, 0);
+        viewEdit.add(actions2, gbc2);
+
         nameHolder.setOpaque(false);
-        nameHolder.add(labelRow, VIEW_LABEL);
-        nameHolder.add(nameField, VIEW_EDIT);
+        nameHolder.add(viewLabel, VIEW_LABEL);
+        nameHolder.add(viewEdit, VIEW_EDIT);
         nameSwap.show(nameHolder, VIEW_LABEL);
 
-        JPanel actions = new JPanel();
-        actions.setOpaque(false);
-        actions.setLayout(new BoxLayout(actions, BoxLayout.X_AXIS));
-        actions.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-        actions.add(editButton);
-        actions.add(Box.createHorizontalStrut(Scale.s(12)));
-        actions.add(open);
-        actions.add(Box.createHorizontalStrut(Scale.s(12)));
-        actions.add(deleteButton);
-
         add(nameHolder, BorderLayout.CENTER);
-        add(actions, BorderLayout.EAST);
+    }
+
+    private JPanel createActionsPanel() {
+        JPanel a = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, Scale.s(12), 0));
+        a.setOpaque(false);
+        PillButton editBtn = new PillButton("Edit");
+        editBtn.addActionListener(e -> beginRename());
+        PillButton openBtn = new PillButton("Open");
+        openBtn.addActionListener(e -> { if (listener != null) listener.onOpen(this); });
+        PillButton deleteBtn = new PillButton("Delete");
+        deleteBtn.addActionListener(e -> { if (listener != null) listener.onDelete(this); });
+        a.add(editBtn);
+        a.add(openBtn);
+        a.add(deleteBtn);
+        a.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, Scale.s(ACTION_HEIGHT) + Scale.s(16)));
+        return a;
     }
 
     private void beginRename() {
@@ -152,6 +167,10 @@ public class NewCard extends JPanel {
         SwingUtilities.invokeLater(() -> {
             nameField.requestFocusInWindow();
             nameField.selectAll();
+            nameHolder.revalidate();
+            nameHolder.repaint();
+            NewCard.this.revalidate();
+            NewCard.this.repaint();
         });
     }
 
@@ -160,6 +179,13 @@ public class NewCard extends JPanel {
         nameSwap.show(nameHolder, VIEW_LABEL);
 
         if (candidate.isEmpty() || candidate.equals(documentName)) {
+            // ensure layout updates even when nothing changed
+            SwingUtilities.invokeLater(() -> {
+                nameHolder.revalidate();
+                nameHolder.repaint();
+                NewCard.this.revalidate();
+                NewCard.this.repaint();
+            });
             return;
         }
         documentName = candidate;
@@ -167,6 +193,12 @@ public class NewCard extends JPanel {
         if (listener != null) {
             listener.onRename(this, documentName);
         }
+        SwingUtilities.invokeLater(() -> {
+            nameHolder.revalidate();
+            nameHolder.repaint();
+            NewCard.this.revalidate();
+            NewCard.this.repaint();
+        });
     }
 
     /* ------------------------------------------------------------------
@@ -200,8 +232,6 @@ public class NewCard extends JPanel {
 
     /** Small dark pill button, matching the "Add New" button's look in App.java. */
     private static final class PillButton extends JButton {
-        private static final int ACTION_WIDTH = 112;
-        private static final int ACTION_HEIGHT = 38;
 
         PillButton(String text) {
             super(text);
@@ -213,18 +243,19 @@ public class NewCard extends JPanel {
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             setHorizontalAlignment(SwingConstants.CENTER);
 
-            setFont(Theme.font(13f));
+                Scale.font(this, 13);
 
-            int width = Scale.s(ACTION_WIDTH);
-            int height = Scale.s(ACTION_HEIGHT);
-            setPreferredSize(new java.awt.Dimension(width, height));
-            setMinimumSize(new java.awt.Dimension(width, height));
-            setMaximumSize(new java.awt.Dimension(width, height));
-            setBorder(BorderFactory.createEmptyBorder(
+                Scale.onScale(() -> {
+                    int width = Scale.s(ACTION_WIDTH);
+                    int height = Scale.s(ACTION_HEIGHT);
+                    setPreferredSize(new java.awt.Dimension(Math.min(width, Scale.s(90)), height));
+                    setMinimumSize(new java.awt.Dimension(Math.min(width, Scale.s(70)), height));
+                setBorder(BorderFactory.createEmptyBorder(
                     Scale.s(8),
                     Scale.s(18),
                     Scale.s(8),
                     Scale.s(18)));
+                });
         }
 
         @Override

@@ -29,6 +29,48 @@ public class AI {
     private static final ChatLanguageModel CHAT_MODEL = createChatModel();
     private static final StreamingChatLanguageModel STREAMING_CHAT_MODEL = createStreamingChatModel();
 
+    public static final class CreateNoteIntent {
+        private final String action;
+        private final String title;
+        private final String content;
+
+        public CreateNoteIntent(String action, String title, String content) {
+            this.action = action;
+            this.title = title;
+            this.content = content;
+        }
+
+        public String getAction() {
+            return action;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public String getContent() {
+            return content;
+        }
+    }
+
+    public static final class DeleteNoteIntent {
+        private final String action;
+        private final String title;
+
+        public DeleteNoteIntent(String action, String title) {
+            this.action = action;
+            this.title = title;
+        }
+
+        public String getAction() {
+            return action;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+    }
+
     public static final class EmotionAnalysis {
         private final String emotion;
         private final int intensity;
@@ -93,6 +135,113 @@ public class AI {
             System.err.println("Unable to load saved documents for AI context: " + ex.getMessage());
             return userText;
         }
+    }
+
+    public static CreateNoteIntent inferCreateNoteIntent(String userText) {
+        if (userText == null || userText.isBlank()) {
+            return null;
+        }
+
+        String prompt = "Decide whether the user is asking to create a new note. "
+                + "If yes, return JSON only in this exact form and nothing else: "
+                + "{\"action\":\"create_note\",\"title\":\"note title\",\"content\":\"note text\"}. "
+                + "If the user is not asking to create a note, return: {\"action\":\"chat\"}. "
+                + "Do not explain yourself. Use the user's exact note title and content when supplied. "
+                + "User request: " + userText;
+
+        String rawResponse = CHAT_MODEL.generate(prompt);
+        return parseCreateNoteIntent(rawResponse);
+    }
+
+    public static DeleteNoteIntent inferDeleteNoteIntent(String userText) {
+        if (userText == null || userText.isBlank()) {
+            return null;
+        }
+
+        String prompt = "Decide whether the user is asking to delete an existing note. "
+                + "If yes, return JSON only in this exact form and nothing else: "
+                + "{\"action\":\"delete_note\",\"title\":\"note title\"}. "
+                + "If the user is not asking to delete a note, return: {\"action\":\"chat\"}. "
+                + "Use the exact note title the user mentions. "
+                + "User request: " + userText;
+
+        String rawResponse = CHAT_MODEL.generate(prompt);
+        return parseDeleteNoteIntent(rawResponse);
+    }
+
+    public static CreateNoteIntent parseCreateNoteIntent(String rawJson) {
+        if (rawJson == null || rawJson.isBlank()) {
+            return null;
+        }
+
+        String json = rawJson.trim();
+        if (json.startsWith("```")) {
+            json = json.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
+        }
+
+        Matcher actionMatcher = Pattern.compile("\\\"action\\\"\\s*:\\s*\\\"(.*?)\\\"",
+                Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(json);
+        Matcher titleMatcher = Pattern.compile("\\\"title\\\"\\s*:\\s*\\\"(.*?)\\\"",
+                Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(json);
+        Matcher contentMatcher = Pattern.compile("\\\"content\\\"\\s*:\\s*\\\"(.*?)\\\"",
+                Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(json);
+
+        if (!actionMatcher.find()) {
+            return null;
+        }
+
+        String action = actionMatcher.group(1).trim();
+        if (!"create_note".equalsIgnoreCase(action)) {
+            return null;
+        }
+
+        if (!titleMatcher.find() || !contentMatcher.find()) {
+            return null;
+        }
+
+        String title = titleMatcher.group(1).replace("\\n", " ").replace("\\\"", "\"").trim();
+        String content = contentMatcher.group(1).replace("\\n", " ").replace("\\\"", "\"").trim();
+        if (title.isBlank() || content.isBlank()) {
+            return null;
+        }
+
+        return new CreateNoteIntent(action, title, content);
+    }
+
+    public static DeleteNoteIntent parseDeleteNoteIntent(String rawJson) {
+        if (rawJson == null || rawJson.isBlank()) {
+            return null;
+        }
+
+        String json = rawJson.trim();
+        if (json.startsWith("```")) {
+            json = json.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "");
+        }
+
+        Matcher actionMatcher = Pattern.compile("\\\"action\\\"\\s*:\\s*\\\"(.*?)\\\"",
+                Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(json);
+        Matcher titleMatcher = Pattern.compile("\\\"title\\\"\\s*:\\s*\\\"(.*?)\\\"",
+                Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(json);
+
+        if (!actionMatcher.find()) {
+            return null;
+        }
+
+        String action = actionMatcher.group(1).trim();
+        if (!"delete_note".equalsIgnoreCase(action)) {
+            return null;
+        }
+
+        if (!titleMatcher.find()) {
+            return null;
+        }
+
+        String title = titleMatcher.group(1).replace("\\n", " ").replace("\\\"", "\"").trim();
+        if (title.isBlank()) {
+            return null;
+        }
+
+        return new DeleteNoteIntent(action, title);
     }
 
     public static CompletableFuture<String> sendMessageAsync(String text) {

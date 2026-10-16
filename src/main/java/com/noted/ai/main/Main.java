@@ -1,6 +1,10 @@
 // Main.java
 package com.noted.ai.main;
 
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import javax.swing.SwingUtilities;
 
 import com.noted.ai.main.components.NewCard;
@@ -12,6 +16,24 @@ import com.noted.ai.main.components.NewCard;
  * assistant replies. App only ever renders what Main tells it to render.
  */
 public class Main {
+
+    public static final class NoteCreateRequest {
+        private final String title;
+        private final String content;
+
+        public NoteCreateRequest(String title, String content) {
+            this.title = title;
+            this.content = content;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public String getContent() {
+            return content;
+        }
+    }
 
     private final App view;
     private int nextDocumentNumber = 1;
@@ -181,8 +203,186 @@ public class Main {
     /* ------------------------------------------------------------------
      * Assistant chat
      * ------------------------------------------------------------------ */
+    public static NoteCreateRequest parseCreateNoteRequest(String userText) {
+        AI.CreateNoteIntent intent = AI.inferCreateNoteIntent(userText);
+        if (intent != null) {
+            return new NoteCreateRequest(cleanNoteValue(intent.getTitle()), cleanNoteValue(intent.getContent()));
+        }
+
+        return legacyParseCreateNoteRequest(userText);
+    }
+
+    private static NoteCreateRequest legacyParseCreateNoteRequest(String userText) {
+        if (userText == null || userText.isBlank()) {
+            return null;
+        }
+
+        String rawText = userText.trim();
+        Matcher commandMatcher = Pattern.compile("(?is)^(?:can\\s+you\\s+|please\\s+)?(?:create|add|make|save)\\b")
+                .matcher(rawText);
+        if (!commandMatcher.find()) {
+            return null;
+        }
+
+        String remainder = rawText.substring(commandMatcher.end()).trim();
+        if (remainder.isBlank()) {
+            return null;
+        }
+
+        String[] separators = {
+                " with content:", " with text:", " and content:", " and text:",
+                " with content ", " with text ", " and content ", " and text ",
+                ":", " - "
+        };
+
+        int bestIndex = -1;
+        String bestSeparator = null;
+        String lowered = remainder.toLowerCase(Locale.ROOT);
+        for (String separator : separators) {
+            int index = lowered.indexOf(separator.toLowerCase(Locale.ROOT));
+            if (index >= 0 && (bestIndex < 0 || index < bestIndex)) {
+                bestIndex = index;
+                bestSeparator = separator;
+            }
+        }
+
+        if (bestIndex < 0 || bestSeparator == null) {
+            return null;
+        }
+
+        String titleCandidate = remainder.substring(0, bestIndex).trim();
+        String contentCandidate = remainder.substring(bestIndex + bestSeparator.length()).trim();
+        if (titleCandidate.isBlank() || contentCandidate.isBlank()) {
+            return null;
+        }
+
+        String title = titleCandidate;
+        while (true) {
+            String nextTitle = title.replaceFirst("(?is)^(?:a|an|new|note|document|called|named|titled)\\s+", "").trim();
+            if (nextTitle.equals(title)) {
+                break;
+            }
+            title = nextTitle;
+        }
+
+        title = title.replaceFirst("(?is)^[\"']([^\"']+)[\"']$", "$1").trim();
+        title = title.replaceFirst("(?is)^[\"']", "").replaceFirst("(?is)[\"']$", "").trim();
+        if (title.isBlank()) {
+            return null;
+        }
+
+        String content = contentCandidate
+                .replaceFirst("(?is)^\\s*(?:with\\s+(?:content|text)|and\\s+(?:content|text))\\s*[:\\-]?\\s*", "")
+                .trim();
+        if (content.isBlank()) {
+            return null;
+        }
+
+        return new NoteCreateRequest(cleanNoteValue(title), cleanNoteValue(content));
+    }
+
+    public static boolean tryCreateNoteFromUserRequest(String userText) {
+        AI.CreateNoteIntent intent = AI.inferCreateNoteIntent(userText);
+        if (intent == null || !"create_note".equalsIgnoreCase(intent.getAction())) {
+            return false;
+        }
+
+        try {
+            Database.initialize();
+            Database.saveDocument(intent.getTitle(), intent.getContent());
+            return true;
+        } catch (Exception ex) {
+            System.err.println("Unable to create note from user request: " + ex.getMessage());
+            return false;
+        }
+    }
+
+    public static boolean tryDeleteNoteFromUserRequest(String userText) {
+        AI.DeleteNoteIntent intent = AI.inferDeleteNoteIntent(userText);
+        if (intent == null || !"delete_note".equalsIgnoreCase(intent.getAction())) {
+            return false;
+        }
+
+        try {
+            Database.initialize();
+            Database.Document document = Database.findDocumentByTitle(intent.getTitle());
+            if (document == null) {
+                return false;
+            }
+            Database.deleteDocument(document.getId());
+            return true;
+        } catch (Exception ex) {
+            System.err.println("Unable to delete note from user request: " + ex.getMessage());
+            return false;
+        }
+    }
+
+    private static String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private static String cleanNoteValue(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        String cleaned = value.replaceAll("[\\r\\n]+", " ").trim();
+        return cleaned.replaceAll("\\s+", " ");
+    }
+
     private void handleSendMessage(String text) {
         view.appendUserMessage(text);
+
+        NoteCreateRequest noteRequest = parseCreateNoteRequest(text);
+        if (noteRequest != null && tryCreateNoteFromUserRequest(text)) {
+            Database.Document created = null;
+            try {
+                created = Database.findDocumentByTitle(noteRequest.getTitle());
+            } catch (Exception ex) {
+                System.err.println("Unable to reload created note: " + ex.getMessage());
+            }
+
+            if (created != null) {
+                activeDocumentId = created.getId();
+            }
+
+            loadExistingDocuments();
+            view.showDocumentEditor(noteRequest.getTitle(), noteRequest.getContent());
+            view.appendAssistantMessage("Created note \"" + noteRequest.getTitle() + "\".");
+            return;
+        }
+
+        AI.DeleteNoteIntent deleteIntent = AI.inferDeleteNoteIntent(text);
+        if (deleteIntent != null && "delete_note".equalsIgnoreCase(deleteIntent.getAction())
+                && tryDeleteNoteFromUserRequest(text)) {
+            String title = deleteIntent.getTitle();
+            if (activeDocumentId > -1) {
+                try {
+                    Database.Document active = Database.findDocumentById(activeDocumentId);
+                    if (active != null && title.equalsIgnoreCase(active.getTitle())) {
+                        activeDocumentId = -1;
+                    }
+                } catch (Exception ex) {
+                    System.err.println("Unable to clear active note on delete: " + ex.getMessage());
+                }
+            }
+
+            loadExistingDocuments();
+            view.showDocuments();
+            view.appendAssistantMessage("Deleted note \"" + title + "\".");
+            return;
+        }
+
         view.beginAssistantThinking();
 
         String contextualPrompt = AI.buildPromptWithDocuments(text);
