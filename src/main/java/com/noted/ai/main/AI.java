@@ -146,6 +146,16 @@ public class AI {
         String normalized = userText.trim();
         String lower = normalized.toLowerCase(Locale.ROOT);
 
+        String storedTitle = extractStoredTitle(normalized);
+        if (storedTitle != null) {
+            String content = normalized;
+            if (lower.contains("poem") || lower.contains("write a poem") || lower.contains("poetry")) {
+                String poem = CHAT_MODEL.generate("Write a short poem about cats. Return only the poem text and nothing else.");
+                content = "Poem about cats:\n" + poem;
+            }
+            return new CreateNoteIntent("create_note", storedTitle, content);
+        }
+
         if ((lower.contains("store it as app idea")
                 || lower.contains("save it as app idea")
                 || lower.contains("save as app idea")
@@ -178,6 +188,26 @@ public class AI {
 
         String rawResponse = CHAT_MODEL.generate(prompt);
         return parseCreateNoteIntent(rawResponse);
+    }
+
+    private static String extractStoredTitle(String userText) {
+        if (userText == null || userText.isBlank()) {
+            return null;
+        }
+
+        Matcher matcher = Pattern.compile("(?is)(?:store|save)(?: it)?(?: as| as the)?\s+(?:the\s+)?(.+)$")
+                .matcher(userText);
+        if (!matcher.find()) {
+            return null;
+        }
+
+        String title = matcher.group(1).trim();
+        title = title.replaceFirst("(?is)^\s*the\s+", "").trim();
+        title = title.replaceFirst("(?is)\s+[.-]$", "").trim();
+        if (title.isBlank() || title.contains(" and ") && title.split(" and ").length > 1 && !title.contains("poem")) {
+            return null;
+        }
+        return title;
     }
 
     public static DeleteNoteIntent inferDeleteNoteIntent(String userText) {

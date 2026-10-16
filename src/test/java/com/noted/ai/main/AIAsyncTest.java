@@ -75,6 +75,19 @@ class AIAsyncTest {
     }
 
     @Test
+    void tryCreateNoteFromUserRequest_createsANote_whenUserSaysStoreItAsNamedPoem() throws SQLException {
+        Database.initialize();
+
+        boolean created = Main.tryCreateNoteFromUserRequest(
+                "write a poem about cats and store it as the cat poem");
+
+        assertTrue(created);
+        Database.Document document = Database.findDocumentByTitle("cat poem");
+        assertNotNull(document);
+        assertTrue(document.getContent().toLowerCase().contains("cat"));
+    }
+
+    @Test
     void tryDeleteNoteFromUserRequest_deletesANoteByTitle() throws SQLException {
         Database.initialize();
         Database.saveDocument("Delete Me", "content");

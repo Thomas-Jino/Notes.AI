@@ -115,7 +115,7 @@ public class Database {
 
     public static void deleteDocumentByTitle(String title) throws SQLException {
         initialize();
-        String sql = "DELETE FROM documents WHERE title = ?";
+        String sql = "DELETE FROM documents WHERE LOWER(title) = LOWER(?)";
 
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -202,7 +202,7 @@ public class Database {
     }
 
     public static Document findDocumentByTitle(String title) throws SQLException {
-        String sql = "SELECT id, title, content FROM documents WHERE title = ? "
+        String sql = "SELECT id, title, content FROM documents WHERE LOWER(title) = LOWER(?) "
                 + "ORDER BY created_at DESC, id DESC LIMIT 1";
 
         try (Connection conn = getConnection();
